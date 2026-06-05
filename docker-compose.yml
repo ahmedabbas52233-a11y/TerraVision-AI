@@ -1,0 +1,82 @@
+version: "3.9"
+
+# TerraVision AI — Full Local Stack
+#
+# Services
+# ────────
+#   api   → FastAPI REST on http://localhost:8000  (docs at /v1/docs)
+#   app   → Streamlit UI  on http://localhost:8501
+#
+# Quick start
+# ───────────
+#   cp .env.example .env          # fill in your keys
+#   docker compose up --build
+#
+# Individual service
+#   docker compose up api         # REST only
+#   docker compose up app         # Streamlit only
+
+x-common-env: &common-env
+  GCP_SERVICE_ACCOUNT_JSON: "${GCP_SERVICE_ACCOUNT_JSON:-}"
+  TERRAVISION_ENV: "${TERRAVISION_ENV:-development}"
+  PYTHONUNBUFFERED: "1"
+
+services:
+
+  # ── FastAPI REST ─────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      target: runtime
+    image: terravision-ai:latest
+    container_name: terravision-api
+    command: >
+      uvicorn api:app
+      --host 0.0.0.0
+      --port 8000
+      --workers 2
+      --log-level info
+    ports:
+      - "8000:8000"
+    environment:
+      <<: *common-env
+      TERRAVISION_API_KEY: "${TERRAVISION_API_KEY:-dev-insecure-key}"
+      CORS_ORIGINS: "http://localhost:8501,http://localhost:3000"
+    volumes:
+      - ./models:/app/models:ro      # mount model checkpoint read-only
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ── Streamlit App ─────────────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      target: runtime
+    image: terravision-ai:latest
+    container_name: terravision-app
+    command: >
+      streamlit run app.py
+      --server.port=8501
+      --server.address=0.0.0.0
+      --server.headless=true
+      --browser.gatherUsageStats=false
+    ports:
+      - "8501:8501"
+    environment:
+      <<: *common-env
+    volumes:
+      - ./models:/app/models:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes: {}
+networks:
+  default:
+    name: terravision-net

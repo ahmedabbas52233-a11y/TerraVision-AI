@@ -1,0 +1,68 @@
+name: 🐛 Bug Report
+description: Report a reproducible bug in TerraVision AI
+title: "[BUG] "
+labels: ["bug"]
+assignees: ["ahmedabbas52233"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill in as much detail as possible.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is.
+      placeholder: "When I click 'Run Live Inference' with coordinates X, Y, the app crashes with..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: Step-by-step instructions to reproduce the bug.
+      value: |
+        1. Enter latitude `...`, longitude `...`
+        2. Select crop type `...`
+        3. Click "Run Live Inference"
+        4. See error: `...`
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behaviour
+      placeholder: "The app should display the yield prediction..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behaviour
+      placeholder: "Instead, the following error appears..."
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: "Python version, OS, Streamlit version"
+      placeholder: "Python 3.11, Ubuntu 22.04, Streamlit 1.35.0"
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I am using the latest version from `main`.
+          required: false

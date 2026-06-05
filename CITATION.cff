@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+message: "If you use TerraVision AI in your research, please cite it as below."
+type: software
+
+title: "TerraVision AI: Satellite-Native Crop Intelligence at Planetary Scale"
+version: 1.0.0
+date-released: "2026-06-01"
+
+authors:
+  - family-names: Hussain
+    given-names: Ahmad Abbas
+    email: ahmedabbas52233@gmail.com
+
+url: "https://github.com/ahmedabbas52233/TerraVision-AI"
+repository-code: "https://github.com/ahmedabbas52233/TerraVision-AI"
+license: CC-BY-4.0
+
+abstract: >
+  TerraVision AI is an open-source, production-deployed precision-agriculture
+  intelligence platform. It combines live Sentinel-2 NDVI extraction via Google
+  Earth Engine with a Spatio-Temporal Transformer (25,089 params) for real-time
+  crop yield prediction and IPCC-aligned carbon sequestration estimation across
+  Wheat, Rice, Maize, and Soybean globally.
+
+keywords:
+  - precision agriculture
+  - crop yield prediction
+  - spatio-temporal transformer
+  - sentinel-2
+  - google-earth-engine
+  - ndvi
+  - carbon-sequestration
+  - remote-sensing
+  - deep-learning
+  - food-security

@@ -1,0 +1,19 @@
+{
+  "generated_utc": "2026-06-05T00:00:00",
+  "model_version": "TerraVisionTransformerV2",
+  "test_metrics": {
+    "mse": 1.0483,
+    "rmse": 1.0238,
+    "mae": 0.6506,
+    "r2": 0.799
+  },
+  "mc_dropout": {
+    "n_passes": 20,
+    "mean_yield": 5.5184,
+    "std_yield": 0.112,
+    "confidence_pct": 91.9,
+    "ci_95_lower": 5.299,
+    "ci_95_upper": 5.738,
+    "ci_95_half_t_ha": 0.2195
+  }
+}

@@ -1,0 +1,63 @@
+name: 🚀 Feature Request
+description: Suggest a new feature or enhancement for TerraVision AI
+title: "[FEAT] "
+labels: ["enhancement"]
+assignees: ["ahmedabbas52233"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Great ideas make TerraVision AI better for everyone. Describe your proposal clearly.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Motivation
+      description: What problem does this feature solve? Who benefits?
+      placeholder: "As an agronomist, I need to analyse multiple coordinates at once..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the feature you'd like to see.
+      placeholder: "Add a CSV upload mode that accepts lat/lon pairs and outputs a batch report..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Have you considered any alternative approaches?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Feature Category
+      options:
+        - Data / Satellite Source
+        - Model Architecture
+        - UI / Visualisation
+        - Output / Reporting
+        - API / Integration
+        - Performance / Scalability
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I am willing to submit a Pull Request for this feature.
+          required: false
