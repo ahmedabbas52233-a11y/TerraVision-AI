@@ -17,9 +17,8 @@ v3.0.0 Enhancements
 
 from __future__ import annotations
 
-from typing import Optional
-
 import json
+import os
 from datetime import datetime
 
 import ee
@@ -31,7 +30,6 @@ from streamlit_folium import folium_static
 from terravision.core import (
     CARBON_FRACTION,
     CONFIDENCE_FLOOR,
-    mc_dropout_confidence,
     CROP_PARAMS,
     MODEL_VERSION,
     build_report,
@@ -41,6 +39,7 @@ from terravision.core import (
     get_live_features,
     get_ndvi_tile_url,
     load_model,
+    mc_dropout_confidence,
     ndvi_status,
 )
 
@@ -310,11 +309,11 @@ def _init_ee() -> None:
         pass
 
     # ── 2. Streamlit secrets (wrapped — throws if secrets.toml is absent) ───
-    secret_json: Optional[str] = None
-    try:
+    secret_json: str | None = None
+    import contextlib
+
+    with contextlib.suppress(Exception):
         secret_json = st.secrets.get("GCP_SERVICE_ACCOUNT")
-    except Exception:
-        pass
 
     # ── 3. Environment variable (Docker / Railway / local .env) ─────────────
     if not secret_json:
@@ -340,6 +339,7 @@ def _init_ee() -> None:
     except Exception as exc:
         st.warning(f"⚠️ GEE authentication failed (Demo Mode active): {exc}")
 
+
 _init_ee()
 
 
@@ -355,9 +355,13 @@ def _cached_model():
 # 3 · SESSION STATE DEFAULTS
 # ─────────────────────────────────────────────────────────────────────────────
 _DEFAULTS = {
-    "ndvi": 0.5, "yield_base": 0.0, "yield_adj": 0.0,
-    "era5": {}, "features": [0.5, 291.5, 0.025],
-    "ran": False, "ndvi_tile_url": None,
+    "ndvi": 0.5,
+    "yield_base": 0.0,
+    "yield_adj": 0.0,
+    "era5": {},
+    "features": [0.5, 291.5, 0.025],
+    "ran": False,
+    "ndvi_tile_url": None,
 }
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
@@ -380,7 +384,8 @@ with st.sidebar:
             Satellite Intelligence · v3.0.0
           </div>
         </div>
-        """, unsafe_allow_html=True,
+        """,
+        unsafe_allow_html=True,
     )
     st.divider()
     st.markdown("**System Status**")
@@ -413,7 +418,8 @@ st.markdown(
               text-transform:uppercase;margin-top:-.4rem;margin-bottom:.5rem">
       Satellite-Native Crop Intelligence at Planetary Scale
     </p>
-    """, unsafe_allow_html=True,
+    """,
+    unsafe_allow_html=True,
 )
 st.divider()
 
@@ -427,12 +433,27 @@ col_left, col_right = st.columns([1, 1.55], gap="large")
 with col_left:
     st.subheader("📍 Field Parameters")
 
-    lat = st.number_input("Latitude",  value=31.5204, min_value=-90.0,  max_value=90.0,  format="%.4f",
-                          help="Decimal degrees. Negative = Southern Hemisphere.")
-    lon = st.number_input("Longitude", value=74.3587, min_value=-180.0, max_value=180.0, format="%.4f",
-                          help="Decimal degrees. Negative = Western Hemisphere.")
-    crop = st.selectbox("Crop Type", list(CROP_PARAMS.keys()),
-                        help="Select the target crop for yield prediction.")
+    lat = st.number_input(
+        "Latitude",
+        value=31.5204,
+        min_value=-90.0,
+        max_value=90.0,
+        format="%.4f",
+        help="Decimal degrees. Negative = Southern Hemisphere.",
+    )
+    lon = st.number_input(
+        "Longitude",
+        value=74.3587,
+        min_value=-180.0,
+        max_value=180.0,
+        format="%.4f",
+        help="Decimal degrees. Negative = Western Hemisphere.",
+    )
+    crop = st.selectbox(
+        "Crop Type",
+        list(CROP_PARAMS.keys()),
+        help="Select the target crop for yield prediction.",
+    )
 
     show_heatmap = st.toggle(
         "🗺️ Show NDVI Heatmap",
@@ -473,43 +494,52 @@ with col_left:
                 with torch.no_grad():
                     raw: float = model(tensor).item()
 
-                ndvi       = features[0]
+                ndvi = features[0]
                 yield_base = compute_yield(raw, ndvi, crop)
-                yield_adj  = era5_yield_adjustment(
+                yield_adj = era5_yield_adjustment(
                     yield_base, era5["temp_c"], era5["precip_mm_month"], crop
                 )
                 carbon = yield_adj * CARBON_FRACTION
 
                 # Real MC Dropout confidence (not hardcoded)
                 conf_tensor = torch.tensor([features], dtype=torch.float32)
-                if hasattr(model, 'SEQ_LEN'):
+                if hasattr(model, "SEQ_LEN"):
                     conf_tensor = torch.tensor([features], dtype=torch.float32)
                 conf_result = mc_dropout_confidence(model, conf_tensor, n_passes=15)
                 confidence_pct = conf_result["confidence_pct"]
-                yield_std      = conf_result["std_yield"]
+                yield_std = conf_result["std_yield"]
 
-                st.session_state.update({
-                    "ndvi": ndvi, "yield_base": yield_base,
-                    "yield_adj": yield_adj, "ran": True,
-                    "confidence_pct": confidence_pct,
-                    "yield_std": yield_std,
-                })
+                st.session_state.update(
+                    {
+                        "ndvi": ndvi,
+                        "yield_base": yield_base,
+                        "yield_adj": yield_adj,
+                        "ran": True,
+                        "confidence_pct": confidence_pct,
+                        "yield_std": yield_std,
+                    }
+                )
 
             st.success("✅ Inference complete!")
 
             # ── ERA5 badge ────────────────────────────────────────────────────
             _src = era5.get("source", "default")
             _src_label = "ERA5-Land Live" if _src == "era5-land" else "ERA5 Default Prior"
-            st.markdown(f'<div class="era5-badge">🌡️ {_src_label}</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="era5-badge">🌡️ {_src_label}</div>', unsafe_allow_html=True
+            )
 
             # ── Primary metrics ───────────────────────────────────────────────
             m1, m2 = st.columns(2)
-            m1.metric("ERA5-Adj. Yield", f"{yield_adj:.2f} t/ha",
-                      delta=f"{yield_adj - yield_base:+.2f} vs base")
+            m1.metric(
+                "ERA5-Adj. Yield",
+                f"{yield_adj:.2f} t/ha",
+                delta=f"{yield_adj - yield_base:+.2f} vs base",
+            )
             m2.metric("NDVI Index", f"{ndvi:.4f}")
 
             m3, m4 = st.columns(2)
-            m3.metric("Base Yield",  f"{yield_base:.2f} t/ha")
+            m3.metric("Base Yield", f"{yield_base:.2f} t/ha")
             m4.metric("Carbon Est.", f"{carbon:.2f} Mg C/ha")
 
             st.divider()
@@ -523,20 +553,33 @@ with col_left:
 
             # ── Vegetation health ─────────────────────────────────────────────
             label, action, alert_type = ndvi_status(ndvi)
-            {"error": st.error, "warning": st.warning,
-             "info": st.info, "success": st.success}[alert_type](
-                f"**{label}**\n\n{action}"
-            )
+            {
+                "error": st.error,
+                "warning": st.warning,
+                "info": st.info,
+                "success": st.success,
+            }[alert_type](f"**{label}**\n\n{action}")
 
             m5, m6 = st.columns(2)
-            m5.metric("Confidence", f"{st.session_state.get('confidence_pct', CONFIDENCE_FLOOR):.1f} %")
-            m6.metric("Version",    f"v{MODEL_VERSION}")
+            m5.metric(
+                "Confidence",
+                f"{st.session_state.get('confidence_pct', CONFIDENCE_FLOOR):.1f} %",
+            )
+            m6.metric("Version", f"v{MODEL_VERSION}")
 
             # ── Download report ───────────────────────────────────────────────
             st.markdown("<br>", unsafe_allow_html=True)
             report_txt = build_report(
-                lat, lon, crop, ndvi, yield_base, yield_adj,
-                carbon, label, action, era5,
+                lat,
+                lon,
+                crop,
+                ndvi,
+                yield_base,
+                yield_adj,
+                carbon,
+                label,
+                action,
+                era5,
             )
             st.download_button(
                 label="📥 Download Intelligence Report",
@@ -574,7 +617,8 @@ with col_right:
                 <span>Moderate</span><span>Dense</span>
               </div>
             </div>
-            """, unsafe_allow_html=True,
+            """,
+            unsafe_allow_html=True,
         )
 
     # Build Folium map ─────────────────────────────────────────────────────────
@@ -600,7 +644,7 @@ with col_right:
 
     # Analysis marker ──────────────────────────────────────────────────────────
     _ran = st.session_state["ran"]
-    _ndvi_now  = st.session_state["ndvi"]
+    _ndvi_now = st.session_state["ndvi"]
     _yield_adj = st.session_state["yield_adj"]
 
     popup_html = (
@@ -623,17 +667,26 @@ with col_right:
 
     # 500 m analysis buffer ────────────────────────────────────────────────────
     folium.Circle(
-        location=[lat, lon], radius=500,
-        color="#00ffaa", weight=1.5,
-        fill=True, fill_color="#00ffaa", fill_opacity=0.10,
+        location=[lat, lon],
+        radius=500,
+        color="#00ffaa",
+        weight=1.5,
+        fill=True,
+        fill_color="#00ffaa",
+        fill_opacity=0.10,
         tooltip="500 m analysis buffer (GEE · Sentinel-2)",
     ).add_to(sat_map)
 
     # 10 km ERA5 buffer ────────────────────────────────────────────────────────
     folium.Circle(
-        location=[lat, lon], radius=10_000,
-        color="#00c8ff", weight=1.0, dash_array="6 4",
-        fill=True, fill_color="#00c8ff", fill_opacity=0.03,
+        location=[lat, lon],
+        radius=10_000,
+        color="#00c8ff",
+        weight=1.0,
+        dash_array="6 4",
+        fill=True,
+        fill_color="#00c8ff",
+        fill_opacity=0.03,
         tooltip="10 km ERA5-Land sampling buffer",
     ).add_to(sat_map)
 
@@ -646,11 +699,11 @@ with col_right:
 st.divider()
 st.subheader("📊 Multi-Modal Intelligence Panel")
 
-_ndvi_now  = st.session_state["ndvi"]
+_ndvi_now = st.session_state["ndvi"]
 _yield_base = st.session_state["yield_base"]
 _yield_adj = st.session_state["yield_adj"]
-_era5      = st.session_state["era5"]
-_ran       = st.session_state["ran"]
+_era5 = st.session_state["era5"]
+_ran = st.session_state["ran"]
 
 fi1, fi2, fi3, fi4, fi5 = st.columns(5)
 
@@ -677,7 +730,7 @@ with fi3:
     st.markdown("**📈 ERA5 Yield Δ**")
     if _ran:
         delta = _yield_adj - _yield_base
-        sign  = "+" if delta >= 0 else ""
+        sign = "+" if delta >= 0 else ""
         st.caption(f"Base:  `{_yield_base:.2f} t/ha`")
         st.caption(f"Adj:   `{_yield_adj:.2f} t/ha`  ({sign}{delta:.2f})")
     else:
@@ -708,10 +761,11 @@ st.markdown(
       © {datetime.utcnow().year}&nbsp; TerraVision AI &nbsp;·&nbsp;
       Developed by
       <strong style="color:#00ffaa">Ahmad Abbas Hussain</strong>
-      &nbsp;·&nbsp; 
+      &nbsp;·&nbsp;
       <br><br>
       🛰️ Sentinel-2 &nbsp;·&nbsp; 🌡️ ERA5-Land &nbsp;·&nbsp;
       ⚡ PyTorch &nbsp;·&nbsp; 🌿 GEE &nbsp;·&nbsp; 🚀 Streamlit
     </div>
-    """, unsafe_allow_html=True,
+    """,
+    unsafe_allow_html=True,
 )

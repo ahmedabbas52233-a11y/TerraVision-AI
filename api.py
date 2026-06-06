@@ -6,11 +6,16 @@ Author  : Ahmad Abbas Hussain · ahmedabbas52233@gmail.com
 GitHub  : https://github.com/ahmedabbas52233/TerraVision-AI
 Version : 1.0.0
 """
+
 from __future__ import annotations
 
-import asyncio, json, logging, os, time
-from datetime import datetime, timezone
-from typing import Any, Literal, Optional, cast
+import asyncio
+import json
+import logging
+import os
+import time
+from datetime import UTC, datetime
+from typing import Literal, cast
 
 import torch
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Security, status
@@ -25,11 +30,21 @@ from starlette.requests import Request
 from starlette.types import ExceptionHandler
 
 from terravision.core import (
-    CARBON_FRACTION, CROP_PARAMS, MODEL_VERSION,
-    ConfidenceResult, Era5Dict,
-    build_report, compute_yield, era5_yield_adjustment,
-    get_era5_features, get_live_features, get_live_features_v2,
-    get_ndvi_tile_url, is_v2, load_model, mc_dropout_confidence, ndvi_status,
+    CARBON_FRACTION,
+    CROP_PARAMS,
+    MODEL_VERSION,
+    ConfidenceResult,
+    build_report,
+    compute_yield,
+    era5_yield_adjustment,
+    get_era5_features,
+    get_live_features,
+    get_live_features_v2,
+    get_ndvi_tile_url,
+    is_v2,
+    load_model,
+    mc_dropout_confidence,
+    ndvi_status,
 )
 
 logging.basicConfig(
@@ -39,13 +54,15 @@ logging.basicConfig(
 )
 log = logging.getLogger("terravision.api")
 
+
 # ── Earth Engine init ─────────────────────────────────────────────────────────
 def _init_ee() -> bool:
     import ee
+
     try:
         sa = os.getenv("GCP_SERVICE_ACCOUNT_JSON")
         if sa:
-            info  = json.loads(sa)
+            info = json.loads(sa)
             creds = ee.ServiceAccountCredentials(info["client_email"], key_data=sa)
             ee.Initialize(creds)
         else:
@@ -56,10 +73,11 @@ def _init_ee() -> bool:
         log.warning("GEE init failed (demo mode): %s", exc)
         return False
 
-_GEE_READY:   bool = _init_ee()
-_MODEL              = load_model()
-_MODEL_READY: bool  = _MODEL is not None
-_IS_V2:       bool  = _MODEL is not None and is_v2(_MODEL)
+
+_GEE_READY: bool = _init_ee()
+_MODEL = load_model()
+_MODEL_READY: bool = _MODEL is not None
+_IS_V2: bool = _MODEL is not None and is_v2(_MODEL)
 
 if _MODEL_READY:
     _n = sum(p.numel() for p in _MODEL.parameters())  # type: ignore[union-attr]
@@ -70,24 +88,29 @@ limiter = Limiter(key_func=get_remote_address)
 
 # ── Config ────────────────────────────────────────────────────────────────────
 _API_KEY: str = os.getenv("TERRAVISION_API_KEY", "dev-insecure-key")
-_ENV:     str = os.getenv("TERRAVISION_ENV", "development")
+_ENV: str = os.getenv("TERRAVISION_ENV", "development")
 _CORS_ORIGINS: list[str] = (
-    ["*"] if _ENV == "development"
+    ["*"]
+    if _ENV == "development"
     else os.getenv("CORS_ORIGINS", "https://terravision-ai.streamlit.app").split(",")
 )
 
 # ── API key dependency ────────────────────────────────────────────────────────
 _hdr = APIKeyHeader(name="X-API-Key", auto_error=False)
 
-async def require_api_key(k: Optional[str] = Security(_hdr)) -> str:
+
+async def require_api_key(k: str | None = Security(_hdr)) -> str:
     if not k or k != _API_KEY:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED,
-                            detail="Invalid or missing X-API-Key header.")
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, detail="Invalid or missing X-API-Key header."
+        )
     return k
 
+
 # ── Noop coroutine (replaces deprecated asyncio.coroutine) ───────────────────
-async def _noop_str() -> Optional[str]:
+async def _noop_str() -> str | None:
     return None
+
 
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(
@@ -100,118 +123,193 @@ app = FastAPI(
         "**Rate limit**: 30 req/min per IP."
     ),
     version=MODEL_VERSION,
-    contact={"name": "Ahmad Abbas Hussain", "email": "ahmedabbas52233@gmail.com",
-              "url": "https://github.com/ahmedabbas52233/TerraVision-AI"},
-    license_info={"name": "CC BY 4.0",
-                  "url":  "https://creativecommons.org/licenses/by/4.0/"},
-    docs_url="/v1/docs", redoc_url="/v1/redoc", openapi_url="/v1/openapi.json",
+    contact={
+        "name": "Ahmad Abbas Hussain",
+        "email": "ahmedabbas52233@gmail.com",
+        "url": "https://github.com/ahmedabbas52233/TerraVision-AI",
+    },
+    license_info={
+        "name": "CC BY 4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/",
+    },
+    docs_url="/v1/docs",
+    redoc_url="/v1/redoc",
+    openapi_url="/v1/openapi.json",
 )
 
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, cast(ExceptionHandler, _rate_limit_exceeded_handler))
-app.add_middleware(CORSMiddleware, allow_origins=_CORS_ORIGINS,
-                   allow_methods=["GET","POST"],
-                   allow_headers=["X-API-Key","Content-Type"],
-                   allow_credentials=False)
+app.add_exception_handler(
+    RateLimitExceeded, cast(ExceptionHandler, _rate_limit_exceeded_handler)
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_CORS_ORIGINS,
+    allow_methods=["GET", "POST"],
+    allow_headers=["X-API-Key", "Content-Type"],
+    allow_credentials=False,
+)
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
-CropType = Literal["Wheat","Rice","Maize","Soybean"]
+CropType = Literal["Wheat", "Rice", "Maize", "Soybean"]
+
 
 class PredictRequest(BaseModel):
-    lat:               float    = Field(..., ge=-90.0,  le=90.0)
-    lon:               float    = Field(..., ge=-180.0, le=180.0)
-    crop:              CropType = Field("Wheat")
-    include_ndvi_tile: bool     = Field(False)
-    include_report:    bool     = Field(False)
-    mc_passes:         int      = Field(20, ge=5, le=100,
-                                        description="MC Dropout passes for confidence (5-100)")
-    model_config = {"json_schema_extra": {
-        "examples": [{"lat": 31.5204, "lon": 74.3587, "crop": "Wheat", "mc_passes": 20}]
-    }}
+    lat: float = Field(..., ge=-90.0, le=90.0)
+    lon: float = Field(..., ge=-180.0, le=180.0)
+    crop: CropType = Field("Wheat")
+    include_ndvi_tile: bool = Field(False)
+    include_report: bool = Field(False)
+    mc_passes: int = Field(
+        20, ge=5, le=100, description="MC Dropout passes for confidence (5-100)"
+    )
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {"lat": 31.5204, "lon": 74.3587, "crop": "Wheat", "mc_passes": 20}
+            ]
+        }
+    }
+
 
 class Era5Response(BaseModel):
-    temp_c: float; precip_mm_month: float; source: str
+    temp_c: float
+    precip_mm_month: float
+    source: str
+
 
 class NdviStatus(BaseModel):
-    label: str; action: str; alert_type: str
+    label: str
+    action: str
+    alert_type: str
+
 
 class PredictResponse(BaseModel):
-    lat: float; lon: float; crop: str
+    lat: float
+    lon: float
+    crop: str
     # Satellite
-    ndvi: float; ndvi_status: NdviStatus; ndvi_tile_url: Optional[str] = None
+    ndvi: float
+    ndvi_status: NdviStatus
+    ndvi_tile_url: str | None = None
     # Climate
     era5: Era5Response
     # Yield
-    yield_base_t_ha: float; yield_adj_t_ha: float; yield_delta_t_ha: float
+    yield_base_t_ha: float
+    yield_adj_t_ha: float
+    yield_delta_t_ha: float
     # Uncertainty — real MC Dropout, not hardcoded
-    confidence_pct:  float
-    yield_std_t_ha:  float
-    ci_95_lower:     float
-    ci_95_upper:     float
+    confidence_pct: float
+    yield_std_t_ha: float
+    ci_95_lower: float
+    ci_95_upper: float
     # Carbon
-    carbon_mg_c_ha: float; carbon_fraction: float
+    carbon_mg_c_ha: float
+    carbon_fraction: float
     # Meta
-    model_name: str; model_version: str; inference_ms: float
-    generated_utc: str; report: Optional[str] = None
+    model_name: str
+    model_version: str
+    inference_ms: float
+    generated_utc: str
+    report: str | None = None
+
 
 class HealthResponse(BaseModel):
-    status: str; model_ready: bool; gee_ready: bool
-    model_name: str; model_version: str; environment: str; timestamp_utc: str
+    status: str
+    model_ready: bool
+    gee_ready: bool
+    model_name: str
+    model_version: str
+    environment: str
+    timestamp_utc: str
+
 
 class CropInfo(BaseModel):
-    name: str; temp_K: float; moisture: float; ndvi_scale: float
+    name: str
+    temp_K: float
+    moisture: float
+    ndvi_scale: float
+
 
 # ── Router ────────────────────────────────────────────────────────────────────
 v1 = APIRouter(prefix="/v1")
 
+
 @v1.get("/", tags=["Meta"])
 async def root() -> dict[str, str]:
-    return {"name": "TerraVision AI API", "version": MODEL_VERSION,
-            "docs": "/v1/docs", "health": "/v1/health",
-            "github": "https://github.com/ahmedabbas52233/TerraVision-AI"}
+    return {
+        "name": "TerraVision AI API",
+        "version": MODEL_VERSION,
+        "docs": "/v1/docs",
+        "health": "/v1/health",
+        "github": "https://github.com/ahmedabbas52233/TerraVision-AI",
+    }
+
 
 @v1.get("/health", response_model=HealthResponse, tags=["Meta"])
 async def health() -> HealthResponse:
     mn = type(_MODEL).__name__ if _MODEL else "none"
     return HealthResponse(
-        status        = "ok" if (_MODEL_READY and _GEE_READY) else "degraded",
-        model_ready   = _MODEL_READY,
-        gee_ready     = _GEE_READY,
-        model_name    = mn,
-        model_version = MODEL_VERSION,
-        environment   = _ENV,
-        timestamp_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+        status="ok" if (_MODEL_READY and _GEE_READY) else "degraded",
+        model_ready=_MODEL_READY,
+        gee_ready=_GEE_READY,
+        model_name=mn,
+        model_version=MODEL_VERSION,
+        environment=_ENV,
+        timestamp_utc=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),
     )
 
-@v1.get("/crops", response_model=list[CropInfo], tags=["Reference"],
-        dependencies=[Depends(require_api_key)])
-async def crops() -> list[CropInfo]:
-    return [CropInfo(name=n, temp_K=float(p["temp_K"]),
-                     moisture=float(p["moisture"]), ndvi_scale=float(p["ndvi_scale"]))
-            for n, p in CROP_PARAMS.items()]
 
-@v1.post("/predict", response_model=PredictResponse, tags=["Inference"],
-         dependencies=[Depends(require_api_key)])
+@v1.get(
+    "/crops",
+    response_model=list[CropInfo],
+    tags=["Reference"],
+    dependencies=[Depends(require_api_key)],
+)
+async def crops() -> list[CropInfo]:
+    return [
+        CropInfo(
+            name=n,
+            temp_K=float(p["temp_K"]),
+            moisture=float(p["moisture"]),
+            ndvi_scale=float(p["ndvi_scale"]),
+        )
+        for n, p in CROP_PARAMS.items()
+    ]
+
+
+@v1.post(
+    "/predict",
+    response_model=PredictResponse,
+    tags=["Inference"],
+    dependencies=[Depends(require_api_key)],
+)
 @limiter.limit("30/minute")
 async def predict(request: Request, req: PredictRequest) -> PredictResponse:
     if not _MODEL_READY or _MODEL is None:
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
-                            detail="Model not loaded. Run: python train.py")
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Model not loaded. Run: python train.py",
+        )
 
     t0 = time.perf_counter()
-    log.info("Inference lat=%.4f lon=%.4f crop=%s v2=%s", req.lat, req.lon, req.crop, _IS_V2)
+    log.info(
+        "Inference lat=%.4f lon=%.4f crop=%s v2=%s", req.lat, req.lon, req.crop, _IS_V2
+    )
 
     # ── Parallel GEE calls ────────────────────────────────────────────────────
     if _IS_V2:
         feat_coro = asyncio.to_thread(get_live_features_v2, req.lat, req.lon, req.crop)
     else:
-        feat_coro = asyncio.to_thread(get_live_features,    req.lat, req.lon, req.crop)
+        feat_coro = asyncio.to_thread(get_live_features, req.lat, req.lon, req.crop)
 
     features, era5, ndvi_tile_url = await asyncio.gather(
         feat_coro,
         asyncio.to_thread(get_era5_features, req.lat, req.lon),
-        asyncio.to_thread(get_ndvi_tile_url, req.lat, req.lon)
-            if req.include_ndvi_tile else _noop_str(),
+        (
+            asyncio.to_thread(get_ndvi_tile_url, req.lat, req.lon)
+            if req.include_ndvi_tile
+            else _noop_str()
+        ),
     )
 
     # ── Inference + MC Dropout confidence (Gap 1 fix) ─────────────────────────
@@ -227,11 +325,12 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
             raw: float = _MODEL(tensor).item()  # type: ignore[union-attr]
 
         ndvi_val = features[0][0] if _IS_V2 else features[0]
-        ybase    = compute_yield(raw, ndvi_val, req.crop)
-        yadj     = era5_yield_adjustment(ybase, era5["temp_c"],
-                                          era5["precip_mm_month"], req.crop)
+        ybase = compute_yield(raw, ndvi_val, req.crop)
+        yadj = era5_yield_adjustment(
+            ybase, era5["temp_c"], era5["precip_mm_month"], req.crop
+        )
         # Real MC Dropout confidence — not hardcoded
-        conf     = mc_dropout_confidence(_MODEL, tensor, n_passes=req.mc_passes)  # type: ignore
+        conf = mc_dropout_confidence(_MODEL, tensor, n_passes=req.mc_passes)  # type: ignore
         return ndvi_val, ybase, yadj, conf  # type: ignore[return-value]
 
     ndvi, yield_base, yield_adj, conf = await asyncio.to_thread(_infer)
@@ -239,40 +338,61 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
     lbl, act, alrt = ndvi_status(ndvi)
     ms = (time.perf_counter() - t0) * 1_000
 
-    log.info("Done — NDVI=%.4f yield=%.2f conf=%.1f%% in %.0f ms",
-             ndvi, yield_adj, conf["confidence_pct"], ms)
+    log.info(
+        "Done — NDVI=%.4f yield=%.2f conf=%.1f%% in %.0f ms",
+        ndvi,
+        yield_adj,
+        conf["confidence_pct"],
+        ms,
+    )
 
-    report_txt: Optional[str] = None
+    report_txt: str | None = None
     if req.include_report:
-        report_txt = build_report(req.lat, req.lon, req.crop, ndvi,
-                                   yield_base, yield_adj, carbon,
-                                   lbl, act, era5, conf)
+        report_txt = build_report(
+            req.lat,
+            req.lon,
+            req.crop,
+            ndvi,
+            yield_base,
+            yield_adj,
+            carbon,
+            lbl,
+            act,
+            era5,
+            conf,
+        )
 
     return PredictResponse(
-        lat=req.lat, lon=req.lon, crop=req.crop,
+        lat=req.lat,
+        lon=req.lon,
+        crop=req.crop,
         ndvi=round(ndvi, 4),
         ndvi_status=NdviStatus(label=lbl, action=act, alert_type=alrt),
         ndvi_tile_url=ndvi_tile_url,
-        era5=Era5Response(temp_c=era5["temp_c"],
-                          precip_mm_month=era5["precip_mm_month"],
-                          source=era5["source"]),
+        era5=Era5Response(
+            temp_c=era5["temp_c"],
+            precip_mm_month=era5["precip_mm_month"],
+            source=era5["source"],
+        ),
         yield_base_t_ha=round(yield_base, 3),
-        yield_adj_t_ha =round(yield_adj, 3),
+        yield_adj_t_ha=round(yield_adj, 3),
         yield_delta_t_ha=round(yield_adj - yield_base, 3),
-        confidence_pct  =conf["confidence_pct"],
-        yield_std_t_ha  =conf["std_yield"],
-        ci_95_lower     =conf["ci_95_lower"],
-        ci_95_upper     =conf["ci_95_upper"],
-        carbon_mg_c_ha  =round(carbon, 3),
-        carbon_fraction =CARBON_FRACTION,
-        model_name      =type(_MODEL).__name__,  # type: ignore[union-attr]
-        model_version   =MODEL_VERSION,
-        inference_ms    =round(ms, 1),
-        generated_utc   =datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
-        report          =report_txt,
+        confidence_pct=conf["confidence_pct"],
+        yield_std_t_ha=conf["std_yield"],
+        ci_95_lower=conf["ci_95_lower"],
+        ci_95_upper=conf["ci_95_upper"],
+        carbon_mg_c_ha=round(carbon, 3),
+        carbon_fraction=CARBON_FRACTION,
+        model_name=type(_MODEL).__name__,  # type: ignore[union-attr]
+        model_version=MODEL_VERSION,
+        inference_ms=round(ms, 1),
+        generated_utc=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),
+        report=report_txt,
     )
 
+
 app.include_router(v1)
+
 
 @app.get("/", include_in_schema=False)
 async def _root() -> RedirectResponse:
