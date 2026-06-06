@@ -447,7 +447,7 @@ Contributions are warmly welcomed! See [CONTRIBUTING.md](CONTRIBUTING.md) for gu
 <div align="center">
 
 ### Ahmad Abbas Hussain
-**AI & Full-Stack Developer **
+**AI & Full-Stack Developer · ML Engineer**
 
 | Contact | Link |
 |---|---|
@@ -458,6 +458,10 @@ Contributions are warmly welcomed! See [CONTRIBUTING.md](CONTRIBUTING.md) for gu
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=flat-square&logo=linkedin)](https://www.linkedin.com/in/ahmad-abbas-hussain-7000151a3/)
 [![GitHub](https://img.shields.io/badge/GitHub-ahmedabbas52233-181717?style=flat-square&logo=github)](https://github.com/ahmedabbas52233)
 
+---|---|
+|  | [ahmedabbas52233@gmail.com](mailto:ahmedabbas52233@gmail.com) |
+|  | [ahmedabbas52233@gmail.com](mailto:ahmedabbas52233@gmail.com) |
+|  | [ahmedabbas52233@gmail.com](mailto:ahmedabbas52233@gmail.com) |
 
 [![GitHub](https://img.shields.io/badge/GitHub-ahmedabbas52233-181717?style=flat-square&logo=github)](https://github.com/ahmedabbas52233)
 

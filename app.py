@@ -30,7 +30,8 @@ from streamlit_folium import folium_static
 
 from terravision.core import (
     CARBON_FRACTION,
-    CONFIDENCE_PCT,
+    CONFIDENCE_FLOOR,
+    mc_dropout_confidence,
     CROP_PARAMS,
     MODEL_VERSION,
     build_report,
@@ -479,9 +480,19 @@ with col_left:
                 )
                 carbon = yield_adj * CARBON_FRACTION
 
+                # Real MC Dropout confidence (not hardcoded)
+                conf_tensor = torch.tensor([features], dtype=torch.float32)
+                if hasattr(model, 'SEQ_LEN'):
+                    conf_tensor = torch.tensor([features], dtype=torch.float32)
+                conf_result = mc_dropout_confidence(model, conf_tensor, n_passes=15)
+                confidence_pct = conf_result["confidence_pct"]
+                yield_std      = conf_result["std_yield"]
+
                 st.session_state.update({
                     "ndvi": ndvi, "yield_base": yield_base,
                     "yield_adj": yield_adj, "ran": True,
+                    "confidence_pct": confidence_pct,
+                    "yield_std": yield_std,
                 })
 
             st.success("✅ Inference complete!")
@@ -518,7 +529,7 @@ with col_left:
             )
 
             m5, m6 = st.columns(2)
-            m5.metric("Confidence", f"{CONFIDENCE_PCT} %")
+            m5.metric("Confidence", f"{st.session_state.get('confidence_pct', CONFIDENCE_FLOOR):.1f} %")
             m6.metric("Version",    f"v{MODEL_VERSION}")
 
             # ── Download report ───────────────────────────────────────────────
