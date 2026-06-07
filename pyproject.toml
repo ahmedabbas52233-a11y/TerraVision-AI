@@ -91,16 +91,16 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = """
- --strict-markers
- --tb=short
- -q
- --cov=terravision
- --cov=api
- --cov-report=term-missing
- --cov-report=html:htmlcov
- --cov-fail-under=60
-"""
+addopts = [
+    "--strict-markers",
+    "--tb=short",
+    "-q",
+    "--cov=terravision",
+    "--cov=api",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+    "--cov-fail-under=60",
+]
 markers = [
     "slow: marks tests as slow-running",
     "integration: marks tests that require live GEE access",
@@ -116,5 +116,5 @@ exclude_lines = [
     "pragma: no cover",
     "if __name__ == .__main__.:",
     "raise NotImplementedError",
-    "\.\.\.",
+    '\.\.\.',
 ]
