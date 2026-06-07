@@ -324,13 +324,11 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
         with torch.no_grad():
             raw: float = _MODEL(tensor).item()  # type: ignore[union-attr]
 
-        # Extract NDVI: V2 → list[list[float]], V1 → list[float]
+        # Extract NDVI — cast resolves union type for Pylance
         if _IS_V2:
-            seq_features = features  # type: ignore[assignment]
-            ndvi_val = float(seq_features[0][0])
+            ndvi_val = float(cast(list[list[float]], features)[0][0])
         else:
-            scalar_features: list[float] = features  # type: ignore[assignment]
-            ndvi_val = float(scalar_features[0])
+            ndvi_val = float(cast(list[float], features)[0])
         ybase = compute_yield(raw, ndvi_val, req.crop)
         yadj = era5_yield_adjustment(
             ybase, era5["temp_c"], era5["precip_mm_month"], req.crop
