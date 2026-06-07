@@ -3,10 +3,10 @@
 <div align="center">
 
 ```
-╔══════════════════════════════════════════════════════════════════════════╗
-║           TerraVision AI — Satellite-Native Crop Intelligence            ║
-║       Spatio-Temporal Transformer · Live Sentinel-2 · IPCC Carbon       ║
-╚══════════════════════════════════════════════════════════════════════════╝
+            ╔══════════════════════════════════════════════════════════════════════════╗
+            ║           TerraVision AI — Satellite-Native Crop Intelligence            ║
+            ║       Spatio-Temporal Transformer · Live Sentinel-2 · IPCC Carbon        ║
+            ╚══════════════════════════════════════════════════════════════════════════╝
 ```
 
 [![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-Streamlit_Cloud-FF4B4B?style=for-the-badge&logo=streamlit)](https://terravision-ai-ahjzofhbfw675mapqbbdgg.streamlit.app)
@@ -16,9 +16,8 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-REST_API-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://hub.docker.com/)
 [![License: CC BY 4.0](https://img.shields.io/badge/License-CC_BY_4.0-lightgrey?style=for-the-badge)](https://creativecommons.org/licenses/by/4.0/)
-[![Stars](https://img.shields.io/github/stars/ahmedabbas52233/TerraVision-AI?style=for-the-badge&color=gold)](https://github.com/ahmedabbas52233/TerraVision-AI/stargazers)
 
-**The only open-source framework combining live Sentinel-2 satellite streams, Spatio-Temporal Transformer inference, and IPCC-aligned carbon modeling — deployed as a public web app.**
+**An open-source framework combining live Sentinel-2 satellite streams, Spatio-Temporal Transformer inference, and IPCC-aligned carbon modeling — deployed as a public web app.**
 
 *Developed by [Ahmad Abbas Hussain](mailto:ahmedabbas52233@gmail.com) · *
 
@@ -219,7 +218,7 @@ docker run -p 8000:8000 -e GCP_SERVICE_ACCOUNT_JSON='{"type":"service_account",.
 
 ### Web App
 
-1. Open the [Live Demo](https://terravision-ai-ahjzofhbfw675mapqbbdgg.streamlit.app)
+1. Open the [Live Demo](https://terravision-ai.streamlit.app/)
 2. Enter **Latitude & Longitude** (decimal degrees)
 3. Select **Crop Type** — Wheat / Rice / Maize / Soybean
 4. Click **🚀 Run Live Inference**
@@ -268,7 +267,7 @@ print(f"Carbon : {raw * 0.47:.2f} Mg C/ha")
 
 | Fig. 3 — Live Inference | Fig. 4 — Multi-Modal Insights |
 |:---:|:---:|
-| ![Wheat Ukraine Part 1](https://github.com/ahmedabbas52233/TerraVision-AI/blob/main/screenshots/Wheat%20(Ukraine%20-%20Low%20Greenery)%20Part%201.PNG?raw=true) | ![Wheat Ukraine Part 2](https://github.com/ahmedabbas52233/TerraVision-AI/blob/main/screenshots/Wheat%20(Ukraine%20-%20Low%20Greenery)%20Part%202.PNG?raw=true) |
+| ![Wheat Ukraine Part 1](https://github.com/ahmedabbas52233-a11y/TerraVision-AI/blob/main/Screenshots/Ukrain-Wheat.png) | ![Wheat Ukraine Part 2](https://github.com/ahmedabbas52233-a11y/TerraVision-AI/blob/main/Screenshots/Ukrain-Wheat1.png) |
 
 > Sparse vegetation (NDVI = **0.13**). Yield adjusted to **3.10 t/ha**. Status: **🔴 Critical Monitoring** → Nitrogen-based soil enrichment recommended.
 
