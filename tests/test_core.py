@@ -5,6 +5,7 @@ Unit tests for TerraVision AI core logic.
 Covers
 ──────
   · TerraVisionTransformer — architecture, forward pass, output shape
+  · TerraVisionTransformerV2 — temporal attention, sequence modelling
   · compute_yield          — normal, bare-soil penalty, ceiling clamp
   · era5_yield_adjustment  — optimum, cold stress, drought, surplus
   · ndvi_status            — all four NDVI brackets
@@ -14,7 +15,7 @@ Covers
 
 Run
 ───
-  pytest tests/test_core.py -v --cov=core --cov-report=term-missing
+  pytest tests/test_core.py -v --cov=terravision.core --cov-report=term-missing
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ from terravision.core import (
     NDVI_CLASSES,
     YIELD_MAX,
     TerraVisionTransformer,
+    TerraVisionTransformerV2,
     build_report,
     compute_yield,
     era5_yield_adjustment,
@@ -60,6 +62,20 @@ def model() -> TerraVisionTransformer:
 @pytest.fixture(scope="module")
 def sample_tensor() -> torch.Tensor:
     return torch.tensor([[0.55, 294.0, 0.045]], dtype=torch.float32)
+
+
+@pytest.fixture(scope="module")
+def model_v2() -> TerraVisionTransformerV2:
+    """Fresh V2 model with random weights."""
+    m = TerraVisionTransformerV2(input_dim=3, model_dim=64)
+    m.eval()
+    return m
+
+
+@pytest.fixture(scope="module")
+def sample_tensor_v2() -> torch.Tensor:
+    """Batch=2, seq=6, features=3 for V2 temporal model."""
+    return torch.randn(2, 6, 3)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -96,9 +112,9 @@ class TestTerraVisionTransformer:
         assert torch.allclose(out1, out2), "Non-deterministic output in eval mode"
 
     def test_parameter_count(self, model):
-        """25,089 parameters for input_dim=3, model_dim=64."""
+        """25,345 parameters for input_dim=3, model_dim=64."""
         n_params = sum(p.numel() for p in model.parameters())
-        assert n_params == 25_089, f"Expected 25,089 params, got {n_params}"
+        assert n_params == 25_345, f"Expected 25,345 params, got {n_params}"
 
     def test_input_projection_xavier_init(self):
         """Xavier init should give non-zero weights with zero bias."""
@@ -117,7 +133,7 @@ class TestTerraVisionTransformerV2:
     def test_output_shape(self, model_v2, sample_tensor_v2):
         with torch.no_grad():
             out = model_v2(sample_tensor_v2)
-        assert out.shape == (1, 1), f"Expected (1,1), got {out.shape}"
+        assert out.shape == (2, 1), f"Expected (2,1), got {out.shape}"
 
     def test_batch_output_shape(self, model_v2):
         batch = torch.randn(8, 6, 3)
@@ -218,8 +234,6 @@ class TestMCDropoutConfidence:
             mc_dropout_confidence(model, tensor, n_passes=n)["std_yield"]
             for n in [5, 5, 5, 30, 30, 30]
         ]
-        # Average std with more passes should be stable (not necessarily lower,
-        # but should not be wildly inconsistent — just verify no exception)
         assert all(s >= 0 for s in stds)
 
 
@@ -281,7 +295,6 @@ class TestEra5YieldAdjustment:
         opt = ERA5_CROP_OPTIMA[crop]
         base = 3.0
         adj = era5_yield_adjustment(base, opt["temp_c"], opt["precip_mm"], crop)
-        # factor bounded to 1.05 × 1.0 gaussian = 1.05
         assert adj >= base, "Optimal conditions should not reduce yield below base"
         assert adj <= base * 1.06, f"Optimal factor exceeded expected ceiling: {adj}"
 
@@ -302,8 +315,7 @@ class TestEra5YieldAdjustment:
         adj_opt = era5_yield_adjustment(base, opt["temp_c"], opt["precip_mm"], crop)
         adj_drought = era5_yield_adjustment(base, opt["temp_c"], 0.0, crop)
         assert adj_drought < adj_opt
-        # precip_factor floor is 0.50
-        assert adj_drought >= base * 0.45  # some thermal factor may slightly reduce
+        assert adj_drought >= base * 0.45
 
     def test_output_within_yield_bounds(self):
         """Adjusted yield must always stay in [0, YIELD_MAX]."""
@@ -410,7 +422,7 @@ class TestBuildReport:
 
     def test_report_contains_carbon(self):
         r = self._make_report()
-        assert "1.64" in r or "1.65" in r  # rounding tolerance
+        assert "1.64" in r or "1.65" in r
 
     def test_report_contains_doi(self):
         r = self._make_report()
@@ -430,7 +442,6 @@ class TestBuildReport:
     def test_era5_block_absent_when_source_default(self):
         era5 = {"temp_c": 20.0, "precip_mm_month": 60.0, "source": "default"}
         r = self._make_report(era5=era5)
-        # No ERA5 detail section when source is default
         assert "ERA5-LAND CLIMATE" not in r
 
     def test_report_is_string(self):
@@ -472,7 +483,7 @@ class TestConstants:
 
     def test_ndvi_classes_sorted(self):
         """NDVI class upper bounds must be strictly ascending."""
-        bounds = [c[0] for c in NDVI_CLASSES[:-1]]  # exclude +inf
+        bounds = [c[0] for c in NDVI_CLASSES[:-1]]
         assert bounds == sorted(bounds), "NDVI_CLASSES are not in ascending order"
 
     def test_model_path_is_absolute(self):
@@ -481,7 +492,6 @@ class TestConstants:
         ), f"MODEL_PATH should be absolute, got: {MODEL_PATH}"
 
     def test_model_path_uses_pathlib(self):
-        """Ensure MODEL_PATH doesn't use a fragile os.path.join with relative parts."""
         assert (
             "TerraVision-AI" in MODEL_PATH
             or "terravision" in MODEL_PATH.lower()

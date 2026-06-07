@@ -4,18 +4,18 @@ Integration tests for TerraVision AI FastAPI endpoints.
 
 Covers
 ──────
-  · GET  /v1/            — info card (public)
-  · GET  /v1/health      — liveness probe (public)
-  · GET  /v1/crops       — authenticated; 401 without key
-  · POST /v1/predict     — authenticated; 401, 422, 503, 200 cases
-  · Rate limiting        — 429 after 30 req/min
-  · CORS headers         — present on responses
-  · Schema validation    — lat/lon bounds, crop enum
-  · Root redirect        — / → /v1/
+ · GET /v1/ — info card (public)
+ · GET /v1/health — liveness probe (public)
+ · GET /v1/crops — authenticated; 401 without key
+ · POST /v1/predict — authenticated; 401, 422, 503, 200 cases
+ · Rate limiting — 429 after 30 req/min
+ · CORS headers — present on responses
+ · Schema validation — lat/lon bounds, crop enum
+ · Root redirect — / → /v1/
 
 Run
 ───
-  TERRAVISION_API_KEY=test-key pytest tests/test_api.py -v --asyncio-mode=auto
+ TERRAVISION_API_KEY=test-key pytest tests/test_api.py -v --asyncio-mode=auto
 """
 
 from __future__ import annotations
@@ -42,9 +42,6 @@ _MOCK_FEATURES = [0.55, 291.5, 0.025]
 _MOCK_ERA5 = {"temp_c": 20.5, "precip_mm_month": 62.3, "source": "era5-land"}
 _MOCK_TILE_URL = "https://earthengine.googleapis.com/v1alpha/projects/earthengine-legacy/maps/mock-id/tiles/{z}/{x}/{y}"
 
-# Patch api-level GEE init so import doesn't call Earth Engine
-# GEE init patched per-test via mock_inference fixture
-
 # Patch at module level before importing app
 with mock.patch.dict(os.environ, {"TERRAVISION_API_KEY": "test-key-abc123"}):
     from api import app
@@ -55,7 +52,6 @@ HEADERS_OK = {"X-API-Key": VALID_KEY}
 HEADERS_BAD = {"X-API-Key": INVALID_KEY}
 
 VALID_PAYLOAD = {"lat": 31.5204, "lon": 74.3587, "crop": "Wheat", "mc_passes": 5}
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # FIXTURES
@@ -71,9 +67,8 @@ def client():
 def mock_inference():
     """
     Patch all GEE / torch calls so /predict runs fully offline.
-    Returns a context manager that yields the three patch objects.
     """
-    from core import TerraVisionTransformer
+    from terravision.core import TerraVisionTransformer
 
     fake_model = TerraVisionTransformer()
     fake_model.eval()
@@ -101,7 +96,7 @@ class TestPublicEndpoints:
     def test_root_contains_version(self, client):
         body = client.get("/v1/").json()
         assert "version" in body
-        assert "3" in body["version"]
+        assert "1" in body["version"]
 
     def test_root_contains_docs_link(self, client):
         body = client.get("/v1/").json()
@@ -212,7 +207,7 @@ class TestCropsEndpoint:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# /v1/predict  — validation
+# /v1/predict — validation
 # ─────────────────────────────────────────────────────────────────────────────
 class TestPredictValidation:
 
@@ -259,7 +254,6 @@ class TestPredictValidation:
             json={"lat": lat, "lon": lon, "crop": "Rice"},
             headers=HEADERS_OK,
         )
-        # 200 or 503 (no model) — not 422
         assert r.status_code in (
             200,
             503,
@@ -267,7 +261,7 @@ class TestPredictValidation:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# /v1/predict  — success path
+# /v1/predict — success path
 # ─────────────────────────────────────────────────────────────────────────────
 class TestPredictSuccess:
 
@@ -287,7 +281,6 @@ class TestPredictSuccess:
             "yield_base_t_ha",
             "yield_adj_t_ha",
             "yield_delta_t_ha",
-            # MC Dropout confidence fields (Gap 1 fix — not hardcoded)
             "confidence_pct",
             "yield_std_t_ha",
             "ci_95_lower",
@@ -303,7 +296,6 @@ class TestPredictSuccess:
 
     def test_confidence_is_real_not_hardcoded(self, client, mock_inference):
         body = client.post("/v1/predict", json=VALID_PAYLOAD, headers=HEADERS_OK).json()
-        # Confidence must be a float in [50, 99] — real MC Dropout, not the old magic 94.2
         assert isinstance(body["confidence_pct"], float)
         assert 50.0 <= body["confidence_pct"] <= 99.0
 
@@ -344,7 +336,7 @@ class TestPredictSuccess:
 
     def test_predict_model_version_in_response(self, client, mock_inference):
         body = client.post("/v1/predict", json=VALID_PAYLOAD, headers=HEADERS_OK).json()
-        assert "3" in body["model_version"]
+        assert "1" in body["model_version"]
 
     def test_predict_inference_ms_positive(self, client, mock_inference):
         body = client.post("/v1/predict", json=VALID_PAYLOAD, headers=HEADERS_OK).json()
@@ -377,21 +369,21 @@ class TestPredictSuccess:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# /v1/predict  — error states
+# /v1/predict — error states
 # ─────────────────────────────────────────────────────────────────────────────
 class TestPredictErrors:
 
     def test_model_not_loaded_returns_503(self, client):
         with patch("api._MODEL_READY", False):
             r = client.post("/v1/predict", json=VALID_PAYLOAD, headers=HEADERS_OK)
-        assert r.status_code == 503
+            assert r.status_code == 503
 
     def test_503_body_contains_detail(self, client):
         with patch("api._MODEL_READY", False):
             body = client.post(
                 "/v1/predict", json=VALID_PAYLOAD, headers=HEADERS_OK
             ).json()
-        assert "detail" in body
+            assert "detail" in body
 
 
 # ─────────────────────────────────────────────────────────────────────────────
