@@ -314,7 +314,7 @@ def train_model(
 
     # MC Dropout confidence on test set
     X_test = torch.stack([X[i] for i in test_ds.indices])
-    conf = mc_dropout_confidence(model, X_test[:64], n_passes=30)
+    conf = mc_dropout_confidence(model, X_test[:64], n_passes=30)  # type: ignore[arg-type]
     log.info(
         "MC Dropout (30 passes) → σ=±%.3f t/ha  95%% CI ±%.3f t/ha",
         conf["std_yield"],

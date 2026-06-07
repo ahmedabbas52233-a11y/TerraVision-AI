@@ -22,9 +22,7 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
 import torch
 
@@ -33,8 +31,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from terravision.core import (
     CARBON_FRACTION,
-    TerraVisionTransformerV2,
-    CONFIDENCE_PCT,
+    CONFIDENCE_FLOOR,
     CROP_PARAMS,
     ERA5_CROP_OPTIMA,
     MODEL_PATH,
@@ -106,9 +103,10 @@ class TestTerraVisionTransformer:
     def test_input_projection_xavier_init(self):
         """Xavier init should give non-zero weights with zero bias."""
         m = TerraVisionTransformer()
-        assert not torch.all(m.input_proj.weight == 0), "Input projection weights are all zero"
+        assert not torch.all(
+            m.input_proj.weight == 0
+        ), "Input projection weights are all zero"
         assert torch.all(m.input_proj.bias == 0), "Input projection bias should be zeros"
-
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -145,7 +143,9 @@ class TestTerraVisionTransformerV2:
         with torch.no_grad():
             out_a = model_v2(seq_a).item()
             out_b = model_v2(seq_b).item()
-        assert out_a != out_b, "V2 model should give different outputs for different NDVI sequences"
+        assert (
+            out_a != out_b
+        ), "V2 model should give different outputs for different NDVI sequences"
 
     def test_deterministic_in_eval(self, model_v2, sample_tensor_v2):
         with torch.no_grad():
@@ -160,39 +160,51 @@ class TestTerraVisionTransformerV2:
 class TestMCDropoutConfidence:
 
     def test_returns_confidence_result(self, model):
-        from terravision.core import mc_dropout_confidence, ConfidenceResult
+        from terravision.core import mc_dropout_confidence
+
         tensor = torch.tensor([[0.5, 291.5, 0.025]], dtype=torch.float32)
         result = mc_dropout_confidence(model, tensor, n_passes=10)
         assert isinstance(result, dict)
-        for key in ("mean_yield", "std_yield", "confidence_pct", "ci_95_lower", "ci_95_upper"):
+        for key in (
+            "mean_yield",
+            "std_yield",
+            "confidence_pct",
+            "ci_95_lower",
+            "ci_95_upper",
+        ):
             assert key in result, f"Missing key: {key}"
 
     def test_confidence_in_valid_range(self, model):
         from terravision.core import mc_dropout_confidence
+
         tensor = torch.tensor([[0.5, 291.5, 0.025]], dtype=torch.float32)
         r = mc_dropout_confidence(model, tensor, n_passes=10)
         assert 0.0 <= r["confidence_pct"] <= 100.0
 
     def test_ci_bounds_consistent(self, model):
         from terravision.core import mc_dropout_confidence
+
         tensor = torch.tensor([[0.5, 291.5, 0.025]], dtype=torch.float32)
         r = mc_dropout_confidence(model, tensor, n_passes=10)
         assert r["ci_95_lower"] <= r["mean_yield"] <= r["ci_95_upper"]
 
     def test_std_is_positive(self, model):
         from terravision.core import mc_dropout_confidence
+
         tensor = torch.tensor([[0.5, 291.5, 0.025]], dtype=torch.float32)
         r = mc_dropout_confidence(model, tensor, n_passes=15)
         assert r["std_yield"] >= 0.0
 
     def test_model_returns_to_eval_after_call(self, model):
         from terravision.core import mc_dropout_confidence
+
         tensor = torch.tensor([[0.5, 291.5, 0.025]], dtype=torch.float32)
         mc_dropout_confidence(model, tensor, n_passes=5)
         assert not model.training, "Model must be restored to eval() after MC Dropout"
 
     def test_v2_model_mc_dropout(self, model_v2, sample_tensor_v2):
         from terravision.core import mc_dropout_confidence
+
         r = mc_dropout_confidence(model_v2, sample_tensor_v2, n_passes=10)
         assert 0.0 <= r["confidence_pct"] <= 100.0
         assert r["ci_95_lower"] <= r["ci_95_upper"]
@@ -200,9 +212,12 @@ class TestMCDropoutConfidence:
     def test_more_passes_reduces_variance(self, model):
         """More MC passes should converge to a more stable estimate."""
         from terravision.core import mc_dropout_confidence
+
         tensor = torch.tensor([[0.5, 291.5, 0.025]], dtype=torch.float32)
-        stds = [mc_dropout_confidence(model, tensor, n_passes=n)["std_yield"]
-                for n in [5, 5, 5, 30, 30, 30]]
+        stds = [
+            mc_dropout_confidence(model, tensor, n_passes=n)["std_yield"]
+            for n in [5, 5, 5, 30, 30, 30]
+        ]
         # Average std with more passes should be stable (not necessarily lower,
         # but should not be wildly inconsistent — just verify no exception)
         assert all(s >= 0 for s in stds)
@@ -216,25 +231,27 @@ class TestComputeYield:
     @pytest.mark.parametrize("crop", ["Wheat", "Rice", "Maize", "Soybean"])
     def test_yield_within_bounds(self, crop):
         """Yield must always be in [0, YIELD_MAX] regardless of inputs."""
-        raw    = 3.0
-        ndvi   = 0.5
+        raw = 3.0
+        ndvi = 0.5
         result = compute_yield(raw, ndvi, crop)
-        assert 0.0 <= result <= YIELD_MAX, f"{crop}: yield {result} outside [0, {YIELD_MAX}]"
+        assert (
+            0.0 <= result <= YIELD_MAX
+        ), f"{crop}: yield {result} outside [0, {YIELD_MAX}]"
 
     def test_bare_soil_penalty_applied(self):
         """NDVI < 0.1 must suppress yield to ≤ 20% of normal."""
         normal_yield = compute_yield(3.0, 0.55, "Wheat")
-        bare_yield   = compute_yield(3.0, 0.05, "Wheat")
-        assert bare_yield < normal_yield * 0.25, (
-            f"Bare-soil penalty not working: bare={bare_yield:.2f}, normal={normal_yield:.2f}"
-        )
+        bare_yield = compute_yield(3.0, 0.05, "Wheat")
+        assert (
+            bare_yield < normal_yield * 0.25
+        ), f"Bare-soil penalty not working: bare={bare_yield:.2f}, normal={normal_yield:.2f}"
 
     def test_yield_ceiling_enforced(self):
         """Extreme NDVI + raw output must not exceed YIELD_MAX."""
         result = compute_yield(100.0, 1.0, "Maize")
-        assert result == pytest.approx(YIELD_MAX, abs=1e-6), (
-            f"Ceiling not enforced: got {result}"
-        )
+        assert result == pytest.approx(
+            YIELD_MAX, abs=1e-6
+        ), f"Ceiling not enforced: got {result}"
 
     def test_yield_floor_enforced(self):
         """Yield must never be negative."""
@@ -243,7 +260,7 @@ class TestComputeYield:
 
     def test_higher_ndvi_higher_yield(self):
         """For same crop and raw_output, higher NDVI should give higher yield."""
-        y_low  = compute_yield(3.0, 0.30, "Maize")
+        y_low = compute_yield(3.0, 0.30, "Maize")
         y_high = compute_yield(3.0, 0.70, "Maize")
         assert y_high > y_low, "Higher NDVI did not produce higher yield"
 
@@ -261,18 +278,18 @@ class TestEra5YieldAdjustment:
     def test_optimal_conditions_near_base(self):
         """At exact thermal + precipitation optima, factor ≈ 1.0 × 1.05 = ~1.05."""
         crop = "Wheat"
-        opt  = ERA5_CROP_OPTIMA[crop]
+        opt = ERA5_CROP_OPTIMA[crop]
         base = 3.0
-        adj  = era5_yield_adjustment(base, opt["temp_c"], opt["precip_mm"], crop)
+        adj = era5_yield_adjustment(base, opt["temp_c"], opt["precip_mm"], crop)
         # factor bounded to 1.05 × 1.0 gaussian = 1.05
         assert adj >= base, "Optimal conditions should not reduce yield below base"
         assert adj <= base * 1.06, f"Optimal factor exceeded expected ceiling: {adj}"
 
     def test_cold_stress_reduces_yield(self):
         """Temperature 30°C below optimum must reduce yield."""
-        crop    = "Wheat"
-        opt_t   = ERA5_CROP_OPTIMA[crop]["temp_c"]
-        opt_p   = ERA5_CROP_OPTIMA[crop]["precip_mm"]
+        crop = "Wheat"
+        opt_t = ERA5_CROP_OPTIMA[crop]["temp_c"]
+        opt_p = ERA5_CROP_OPTIMA[crop]["precip_mm"]
         adj_opt = era5_yield_adjustment(4.0, opt_t, opt_p, crop)
         adj_cold = era5_yield_adjustment(4.0, opt_t - 30, opt_p, crop)
         assert adj_cold < adj_opt, "Cold stress should reduce yield"
@@ -280,9 +297,9 @@ class TestEra5YieldAdjustment:
     def test_drought_reduces_yield(self):
         """Zero precipitation must reduce yield to ~50% of optimal-precip yield."""
         crop = "Rice"
-        opt  = ERA5_CROP_OPTIMA[crop]
+        opt = ERA5_CROP_OPTIMA[crop]
         base = 5.0
-        adj_opt    = era5_yield_adjustment(base, opt["temp_c"], opt["precip_mm"], crop)
+        adj_opt = era5_yield_adjustment(base, opt["temp_c"], opt["precip_mm"], crop)
         adj_drought = era5_yield_adjustment(base, opt["temp_c"], 0.0, crop)
         assert adj_drought < adj_opt
         # precip_factor floor is 0.50
@@ -331,20 +348,25 @@ class TestNdviStatus:
         assert "High" in label
         assert alert == "success"
 
-    @pytest.mark.parametrize("ndvi,expected_alert", [
-        (-0.5,  "error"),
-        (0.0,   "error"),
-        (0.19,  "error"),
-        (0.20,  "warning"),
-        (0.29,  "warning"),
-        (0.30,  "info"),
-        (0.59,  "info"),
-        (0.60,  "success"),
-        (0.999, "success"),
-    ])
+    @pytest.mark.parametrize(
+        "ndvi,expected_alert",
+        [
+            (-0.5, "error"),
+            (0.0, "error"),
+            (0.19, "error"),
+            (0.20, "warning"),
+            (0.29, "warning"),
+            (0.30, "info"),
+            (0.59, "info"),
+            (0.60, "success"),
+            (0.999, "success"),
+        ],
+    )
     def test_boundary_classifications(self, ndvi, expected_alert):
         _, _, alert = ndvi_status(ndvi)
-        assert alert == expected_alert, f"NDVI {ndvi} → got '{alert}', expected '{expected_alert}'"
+        assert (
+            alert == expected_alert
+        ), f"NDVI {ndvi} → got '{alert}', expected '{expected_alert}'"
 
     def test_returns_three_strings(self):
         result = ndvi_status(0.5)
@@ -360,9 +382,15 @@ class TestBuildReport:
     def _make_report(self, era5=None):
         label, action, _ = ndvi_status(0.45)
         return build_report(
-            lat=31.5204, lon=74.3587, crop="Wheat",
-            ndvi=0.45, yield_base=3.8, yield_adjusted=3.5,
-            carbon=1.645, label=label, action=action,
+            lat=31.5204,
+            lon=74.3587,
+            crop="Wheat",
+            ndvi=0.45,
+            yield_base=3.8,
+            yield_adjusted=3.5,
+            carbon=1.645,
+            label=label,
+            action=action,
             era5=era5,
         )
 
@@ -382,7 +410,7 @@ class TestBuildReport:
 
     def test_report_contains_carbon(self):
         r = self._make_report()
-        assert "1.64" in r or "1.65" in r   # rounding tolerance
+        assert "1.64" in r or "1.65" in r  # rounding tolerance
 
     def test_report_contains_doi(self):
         r = self._make_report()
@@ -432,14 +460,15 @@ class TestConstants:
             assert required.issubset(params.keys()), f"{crop} missing keys"
 
     def test_carbon_fraction_ipcc(self):
-        assert CARBON_FRACTION == pytest.approx(0.47, abs=1e-6), \
-            "IPCC CF must be exactly 0.47"
+        assert (
+            pytest.approx(0.47, abs=1e-6) == CARBON_FRACTION
+        ), "IPCC CF must be exactly 0.47"
 
     def test_yield_max_agronomic(self):
         assert 12.0 <= YIELD_MAX <= 20.0, "YIELD_MAX outside agronomic range"
 
     def test_confidence_pct_range(self):
-        assert 0.0 < CONFIDENCE_PCT <= 100.0
+        assert 0.0 < CONFIDENCE_FLOOR <= 100.0
 
     def test_ndvi_classes_sorted(self):
         """NDVI class upper bounds must be strictly ascending."""
@@ -447,13 +476,17 @@ class TestConstants:
         assert bounds == sorted(bounds), "NDVI_CLASSES are not in ascending order"
 
     def test_model_path_is_absolute(self):
-        assert os.path.isabs(MODEL_PATH), \
-            f"MODEL_PATH should be absolute, got: {MODEL_PATH}"
+        assert os.path.isabs(
+            MODEL_PATH
+        ), f"MODEL_PATH should be absolute, got: {MODEL_PATH}"
 
     def test_model_path_uses_pathlib(self):
         """Ensure MODEL_PATH doesn't use a fragile os.path.join with relative parts."""
-        assert "TerraVision-AI" in MODEL_PATH or "terravision" in MODEL_PATH.lower() or \
-               "models" in MODEL_PATH
+        assert (
+            "TerraVision-AI" in MODEL_PATH
+            or "terravision" in MODEL_PATH.lower()
+            or "models" in MODEL_PATH
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -467,11 +500,13 @@ class TestModelLoad:
 
     def test_checkpoint_loads_without_error(self):
         from terravision.core import load_model
+
         m = load_model()
         assert m is not None, "load_model() returned None despite checkpoint existing"
 
     def test_loaded_model_is_eval(self):
         from terravision.core import load_model
+
         m = load_model()
         assert m is not None, "load_model() returned None despite checkpoint existing"
         assert not m.training, "Loaded model should be in eval mode"

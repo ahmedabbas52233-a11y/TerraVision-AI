@@ -23,11 +23,10 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
-from httpx import AsyncClient
 
 # ── make repo root importable ─────────────────────────────────────────────────
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -39,22 +38,20 @@ os.environ.setdefault("TERRAVISION_ENV", "development")
 # Patch GEE init and model load before app import so tests run without credentials
 import unittest.mock as mock
 
-_MOCK_FEATURES  = [0.55, 291.5, 0.025]
-_MOCK_ERA5      = {"temp_c": 20.5, "precip_mm_month": 62.3, "source": "era5-land"}
-_MOCK_TILE_URL  = "https://earthengine.googleapis.com/v1alpha/projects/earthengine-legacy/maps/mock-id/tiles/{z}/{x}/{y}"
+_MOCK_FEATURES = [0.55, 291.5, 0.025]
+_MOCK_ERA5 = {"temp_c": 20.5, "precip_mm_month": 62.3, "source": "era5-land"}
+_MOCK_TILE_URL = "https://earthengine.googleapis.com/v1alpha/projects/earthengine-legacy/maps/mock-id/tiles/{z}/{x}/{y}"
 
 # Patch api-level GEE init so import doesn't call Earth Engine
-with mock.patch("api._init_ee", return_value=None):
-    pass
+# GEE init patched per-test via mock_inference fixture
 
 # Patch at module level before importing app
 with mock.patch.dict(os.environ, {"TERRAVISION_API_KEY": "test-key-abc123"}):
-    import api as api_module
     from api import app
 
-VALID_KEY   = "test-key-abc123"
+VALID_KEY = "test-key-abc123"
 INVALID_KEY = "wrong-key"
-HEADERS_OK  = {"X-API-Key": VALID_KEY}
+HEADERS_OK = {"X-API-Key": VALID_KEY}
 HEADERS_BAD = {"X-API-Key": INVALID_KEY}
 
 VALID_PAYLOAD = {"lat": 31.5204, "lon": 74.3587, "crop": "Wheat", "mc_passes": 5}
@@ -76,7 +73,6 @@ def mock_inference():
     Patch all GEE / torch calls so /predict runs fully offline.
     Returns a context manager that yields the three patch objects.
     """
-    import torch
     from core import TerraVisionTransformer
 
     fake_model = TerraVisionTransformer()
@@ -87,8 +83,8 @@ def mock_inference():
         patch("api._MODEL_READY", True),
         patch("api._GEE_READY", True),
         patch("api.get_live_features", return_value=_MOCK_FEATURES),
-        patch("api.get_era5_features",  return_value=_MOCK_ERA5),
-        patch("api.get_ndvi_tile_url",  return_value=_MOCK_TILE_URL),
+        patch("api.get_era5_features", return_value=_MOCK_ERA5),
+        patch("api.get_ndvi_tile_url", return_value=_MOCK_TILE_URL),
     ):
         yield
 
@@ -121,8 +117,14 @@ class TestPublicEndpoints:
 
     def test_health_schema(self, client):
         body = client.get("/v1/health").json()
-        required = {"status", "model_ready", "gee_ready", "model_version",
-                    "environment", "timestamp_utc"}
+        required = {
+            "status",
+            "model_ready",
+            "gee_ready",
+            "model_version",
+            "environment",
+            "timestamp_utc",
+        }
         assert required.issubset(body.keys())
 
     def test_health_status_field_is_string(self, client):
@@ -189,23 +191,24 @@ class TestCropsEndpoint:
         assert len(body) == 4
 
     def test_crops_contain_expected_names(self, client):
-        body   = client.get("/v1/crops", headers=HEADERS_OK).json()
-        names  = {item["name"] for item in body}
+        body = client.get("/v1/crops", headers=HEADERS_OK).json()
+        names = {item["name"] for item in body}
         assert names == {"Wheat", "Rice", "Maize", "Soybean"}
 
     def test_crop_item_schema(self, client):
         body = client.get("/v1/crops", headers=HEADERS_OK).json()
         for item in body:
-            assert "name"       in item
-            assert "temp_K"     in item
-            assert "moisture"   in item
+            assert "name" in item
+            assert "temp_K" in item
+            assert "moisture" in item
             assert "ndvi_scale" in item
 
     def test_crop_temp_k_in_range(self, client):
         body = client.get("/v1/crops", headers=HEADERS_OK).json()
         for item in body:
-            assert 270.0 <= item["temp_K"] <= 310.0, \
-                f"{item['name']}: temp_K={item['temp_K']} out of range"
+            assert (
+                270.0 <= item["temp_K"] <= 310.0
+            ), f"{item['name']}: temp_K={item['temp_K']} out of range"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -215,28 +218,34 @@ class TestPredictValidation:
 
     @pytest.mark.parametrize("lat", [-91.0, 91.0, 999.0])
     def test_invalid_lat_returns_422(self, client, lat):
-        r = client.post("/v1/predict",
-                        json={"lat": lat, "lon": 0.0, "crop": "Wheat"},
-                        headers=HEADERS_OK)
+        r = client.post(
+            "/v1/predict",
+            json={"lat": lat, "lon": 0.0, "crop": "Wheat"},
+            headers=HEADERS_OK,
+        )
         assert r.status_code == 422, f"Expected 422 for lat={lat}, got {r.status_code}"
 
     @pytest.mark.parametrize("lon", [-181.0, 181.0, 999.0])
     def test_invalid_lon_returns_422(self, client, lon):
-        r = client.post("/v1/predict",
-                        json={"lat": 0.0, "lon": lon, "crop": "Wheat"},
-                        headers=HEADERS_OK)
+        r = client.post(
+            "/v1/predict",
+            json={"lat": 0.0, "lon": lon, "crop": "Wheat"},
+            headers=HEADERS_OK,
+        )
         assert r.status_code == 422, f"Expected 422 for lon={lon}, got {r.status_code}"
 
     def test_invalid_crop_returns_422(self, client):
-        r = client.post("/v1/predict",
-                        json={"lat": 0.0, "lon": 0.0, "crop": "Tomato"},
-                        headers=HEADERS_OK)
+        r = client.post(
+            "/v1/predict",
+            json={"lat": 0.0, "lon": 0.0, "crop": "Tomato"},
+            headers=HEADERS_OK,
+        )
         assert r.status_code == 422
 
     def test_missing_lat_returns_422(self, client):
-        r = client.post("/v1/predict",
-                        json={"lon": 0.0, "crop": "Wheat"},
-                        headers=HEADERS_OK)
+        r = client.post(
+            "/v1/predict", json={"lon": 0.0, "crop": "Wheat"}, headers=HEADERS_OK
+        )
         assert r.status_code == 422
 
     def test_missing_body_returns_422(self, client):
@@ -245,12 +254,16 @@ class TestPredictValidation:
 
     @pytest.mark.parametrize("lat,lon", [(-90.0, -180.0), (90.0, 180.0), (0.0, 0.0)])
     def test_boundary_coordinates_accepted(self, client, mock_inference, lat, lon):
-        r = client.post("/v1/predict",
-                        json={"lat": lat, "lon": lon, "crop": "Rice"},
-                        headers=HEADERS_OK)
+        r = client.post(
+            "/v1/predict",
+            json={"lat": lat, "lon": lon, "crop": "Rice"},
+            headers=HEADERS_OK,
+        )
         # 200 or 503 (no model) — not 422
-        assert r.status_code in (200, 503), \
-            f"Expected 200/503 for boundary coords, got {r.status_code}"
+        assert r.status_code in (
+            200,
+            503,
+        ), f"Expected 200/503 for boundary coords, got {r.status_code}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -265,12 +278,26 @@ class TestPredictSuccess:
     def test_predict_response_schema(self, client, mock_inference):
         body = client.post("/v1/predict", json=VALID_PAYLOAD, headers=HEADERS_OK).json()
         required = {
-            "lat", "lon", "crop", "ndvi", "ndvi_status", "era5",
-            "yield_base_t_ha", "yield_adj_t_ha", "yield_delta_t_ha",
+            "lat",
+            "lon",
+            "crop",
+            "ndvi",
+            "ndvi_status",
+            "era5",
+            "yield_base_t_ha",
+            "yield_adj_t_ha",
+            "yield_delta_t_ha",
             # MC Dropout confidence fields (Gap 1 fix — not hardcoded)
-            "confidence_pct", "yield_std_t_ha", "ci_95_lower", "ci_95_upper",
-            "carbon_mg_c_ha", "carbon_fraction",
-            "model_name", "model_version", "inference_ms", "generated_utc",
+            "confidence_pct",
+            "yield_std_t_ha",
+            "ci_95_lower",
+            "ci_95_upper",
+            "carbon_mg_c_ha",
+            "carbon_fraction",
+            "model_name",
+            "model_version",
+            "inference_ms",
+            "generated_utc",
         }
         assert required.issubset(body.keys()), f"Missing keys: {required - body.keys()}"
 
@@ -289,7 +316,10 @@ class TestPredictSuccess:
 
     def test_model_name_in_response(self, client, mock_inference):
         body = client.post("/v1/predict", json=VALID_PAYLOAD, headers=HEADERS_OK).json()
-        assert body["model_name"] in ("TerraVisionTransformerV2", "TerraVisionTransformer")"
+        assert body["model_name"] in (
+            "TerraVisionTransformerV2",
+            "TerraVisionTransformer",
+        )
 
     def test_predict_ndvi_status_schema(self, client, mock_inference):
         body = client.post("/v1/predict", json=VALID_PAYLOAD, headers=HEADERS_OK).json()
@@ -305,8 +335,8 @@ class TestPredictSuccess:
     def test_predict_yield_values_positive(self, client, mock_inference):
         body = client.post("/v1/predict", json=VALID_PAYLOAD, headers=HEADERS_OK).json()
         assert body["yield_base_t_ha"] >= 0.0
-        assert body["yield_adj_t_ha"]  >= 0.0
-        assert body["carbon_mg_c_ha"]  >= 0.0
+        assert body["yield_adj_t_ha"] >= 0.0
+        assert body["carbon_mg_c_ha"] >= 0.0
 
     def test_predict_carbon_fraction_correct(self, client, mock_inference):
         body = client.post("/v1/predict", json=VALID_PAYLOAD, headers=HEADERS_OK).json()
@@ -358,7 +388,9 @@ class TestPredictErrors:
 
     def test_503_body_contains_detail(self, client):
         with patch("api._MODEL_READY", False):
-            body = client.post("/v1/predict", json=VALID_PAYLOAD, headers=HEADERS_OK).json()
+            body = client.post(
+                "/v1/predict", json=VALID_PAYLOAD, headers=HEADERS_OK
+            ).json()
         assert "detail" in body
 
 

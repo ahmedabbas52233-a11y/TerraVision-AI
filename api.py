@@ -313,7 +313,7 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
     )
 
     # ── Inference + MC Dropout confidence (Gap 1 fix) ─────────────────────────
-    def _infer() -> tuple[float, float, ConfidenceResult]:
+    def _infer() -> tuple[float, float, float, ConfidenceResult]:
         if _IS_V2:
             # V2: features is list[list[float]] → (1, seq_len, 3)
             tensor = torch.tensor([features], dtype=torch.float32)
@@ -324,14 +324,20 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
         with torch.no_grad():
             raw: float = _MODEL(tensor).item()  # type: ignore[union-attr]
 
-        ndvi_val = features[0][0] if _IS_V2 else features[0]
+        # Extract NDVI: V2 → list[list[float]], V1 → list[float]
+        if _IS_V2:
+            seq_features = features  # type: ignore[assignment]
+            ndvi_val = float(seq_features[0][0])
+        else:
+            scalar_features: list[float] = features  # type: ignore[assignment]
+            ndvi_val = float(scalar_features[0])
         ybase = compute_yield(raw, ndvi_val, req.crop)
         yadj = era5_yield_adjustment(
             ybase, era5["temp_c"], era5["precip_mm_month"], req.crop
         )
         # Real MC Dropout confidence — not hardcoded
         conf = mc_dropout_confidence(_MODEL, tensor, n_passes=req.mc_passes)  # type: ignore
-        return ndvi_val, ybase, yadj, conf  # type: ignore[return-value]
+        return ndvi_val, ybase, yadj, conf
 
     ndvi, yield_base, yield_adj, conf = await asyncio.to_thread(_infer)
     carbon = yield_adj * CARBON_FRACTION

@@ -6,14 +6,16 @@ on:
   pull_request:
     branches: [main]
 
+# Force all actions to Node.js 24 — eliminates deprecation warnings
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
   PYTHON_VERSION:      "3.11"
   TERRAVISION_API_KEY: "ci-test-key-abc123"
   TERRAVISION_ENV:     "development"
 
 jobs:
 
-  # ── 1. Lint ──────────────────────────────────────────────────────────────────
+  # ── 1. Lint ─────────────────────────────────────────────────────────────────
   lint:
     name: Lint (black + ruff)
     runs-on: ubuntu-latest
@@ -28,21 +30,26 @@ jobs:
       - name: Install linters
         run: pip install black ruff
 
+      # Only lint files that exist — train.py root shim may be absent
       - name: black — format check
         run: |
           black --check --line-length 90 \
             terravision/core.py \
             terravision/train.py \
-            api.py app.py train.py
+            api.py \
+            app.py \
+            $([ -f train.py ] && echo train.py || echo "")
 
       - name: ruff — lint check
         run: |
           ruff check \
             terravision/core.py \
             terravision/train.py \
-            api.py app.py train.py
+            api.py \
+            app.py \
+            $([ -f train.py ] && echo train.py || echo "")
 
-  # ── 2. Tests + Coverage ───────────────────────────────────────────────────────
+  # ── 2. Tests + Coverage ──────────────────────────────────────────────────────
   test:
     name: Tests (pytest + coverage)
     runs-on: ubuntu-latest
@@ -55,7 +62,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
 
-      - name: Install CPU-only torch first (avoids 2 GB CUDA download)
+      - name: Install CPU-only torch (avoids 2 GB CUDA download in CI)
         run: |
           pip install torch --index-url https://download.pytorch.org/whl/cpu
 
@@ -64,7 +71,7 @@ jobs:
           pip install \
             streamlit streamlit-folium earthengine-api \
             numpy scikit-learn folium \
-            fastapi uvicorn pydantic slowapi httpx \
+            fastapi "uvicorn[standard]" pydantic slowapi httpx \
             pytest pytest-asyncio pytest-cov pytest-mock
 
       - name: Run tests with coverage
@@ -80,13 +87,13 @@ jobs:
             --cov-fail-under=75 \
             -v
 
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
         with:
           file: coverage.xml
           fail_ci_if_error: false
 
-  # ── 3. Security ───────────────────────────────────────────────────────────────
+  # ── 3. Security ──────────────────────────────────────────────────────────────
   security:
     name: Security (pip-audit)
     runs-on: ubuntu-latest
@@ -107,12 +114,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build image
-        run: |
-          docker build --target runtime --tag terravision-ai:ci .
+        run: docker build --target runtime --tag terravision-ai:ci .
       - name: Verify import
         run: |
           docker run --rm \
             -e TERRAVISION_API_KEY=ci-key \
             -e TERRAVISION_ENV=development \
             terravision-ai:ci \
-            python -c "from terravision.core import TerraVisionTransformerV2; print('✅ V2 import OK')"
+            python -c "from terravision.core import TerraVisionTransformerV2; print('✅ V2 OK')"
