@@ -19,6 +19,11 @@ env/
 # Earth Engine credentials
 .config/earthengine/
 
+# Google Cloud Service Account Keys (NEVER commit these)
+*.json
+!package.json
+!package-lock.json
+
 # PyTorch (keep checkpoint in repo; ignore large training artefacts)
 *.ckpt
 training_output/
