@@ -9,7 +9,7 @@
 ╚══════════════════════════════════════════════════════════════════════════╝
 ```
 
-[![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-Streamlit_Cloud-FF4B4B?style=for-the-badge&logo=streamlit)](https://terravision-ai.streamlit.app)
+[![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-Streamlit_Cloud-FF4B4B?style=for-the-badge&logo=streamlit)](https://terravision-ai-ahjzofhbfw675mapqbbdgg.streamlit.app)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![Google Earth Engine](https://img.shields.io/badge/Google_Earth_Engine-Sentinel--2_+_ERA5-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://earthengine.google.com/)
@@ -219,7 +219,7 @@ docker run -p 8000:8000 -e GCP_SERVICE_ACCOUNT_JSON='{"type":"service_account",.
 
 ### Web App
 
-1. Open the [Live Demo](https://terravision-ai.streamlit.app)
+1. Open the [Live Demo](https://terravision-ai-ahjzofhbfw675mapqbbdgg.streamlit.app)
 2. Enter **Latitude & Longitude** (decimal degrees)
 3. Select **Crop Type** — Wheat / Rice / Maize / Soybean
 4. Click **🚀 Run Live Inference**
@@ -458,10 +458,6 @@ Contributions are warmly welcomed! See [CONTRIBUTING.md](CONTRIBUTING.md) for gu
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=flat-square&logo=linkedin)](https://www.linkedin.com/in/ahmad-abbas-hussain-7000151a3/)
 [![GitHub](https://img.shields.io/badge/GitHub-ahmedabbas52233-181717?style=flat-square&logo=github)](https://github.com/ahmedabbas52233)
 
----|---|
-|  | [ahmedabbas52233@gmail.com](mailto:ahmedabbas52233@gmail.com) |
-|  | [ahmedabbas52233@gmail.com](mailto:ahmedabbas52233@gmail.com) |
-|  | [ahmedabbas52233@gmail.com](mailto:ahmedabbas52233@gmail.com) |
 
 [![GitHub](https://img.shields.io/badge/GitHub-ahmedabbas52233-181717?style=flat-square&logo=github)](https://github.com/ahmedabbas52233)
 
