@@ -56,18 +56,8 @@ VALID_PAYLOAD = {"lat": 31.5204, "lon": 74.3587, "crop": "Wheat", "mc_passes": 5
 # ─────────────────────────────────────────────────────────────────────────────
 # FIXTURES
 # ─────────────────────────────────────────────────────────────────────────────
-@pytest.fixture(scope="module")
-def client():
-    """Sync test client — no real GEE calls."""
-    with TestClient(app, raise_server_exceptions=True) as c:
-        yield c
-
-
 @pytest.fixture
 def mock_inference():
-    """
-    Patch all GEE / torch calls so /predict runs fully offline.
-    """
     from terravision.core import TerraVisionTransformer
 
     fake_model = TerraVisionTransformer()
@@ -77,6 +67,7 @@ def mock_inference():
         patch("api._MODEL", fake_model),
         patch("api._MODEL_READY", True),
         patch("api._GEE_READY", True),
+        patch("api._IS_V2", False),  # ← ADD THIS
         patch("api.get_live_features", return_value=_MOCK_FEATURES),
         patch("api.get_era5_features", return_value=_MOCK_ERA5),
         patch("api.get_ndvi_tile_url", return_value=_MOCK_TILE_URL),
