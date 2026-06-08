@@ -7,13 +7,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY requirements.txt .
 
-# Install CPU-only torch first (prevents 2 GB CUDA download)
+# Install CPU-only torch first, then everything else from requirements
 RUN pip install --upgrade pip \
  && pip install --user torch --index-url https://download.pytorch.org/whl/cpu \
- && pip install --user --no-cache-dir \
-      streamlit streamlit-folium earthengine-api \
-      numpy scikit-learn folium \
-      fastapi "uvicorn[standard]" pydantic slowapi httpx
+ && pip install --user --no-cache-dir -r requirements.txt
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
 FROM python:3.11-slim AS runtime
@@ -25,6 +22,8 @@ RUN useradd --create-home --shell /bin/bash terravision
 WORKDIR /app
 
 COPY --from=builder /root/.local /home/terravision/.local
+RUN chown -R terravision:terravision /home/terravision/.local
+
 COPY --chown=terravision:terravision . .
 
 ENV PATH="/home/terravision/.local/bin:${PATH}" \
@@ -33,9 +32,7 @@ ENV PATH="/home/terravision/.local/bin:${PATH}" \
     TERRAVISION_ENV=production
 
 USER terravision
-EXPOSE 8000
+EXPOSE 8000 8501
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-  CMD curl -f http://localhost:8000/v1/health || exit 1
-
-CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+# Default to API; compose overrides for Streamlit
+CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

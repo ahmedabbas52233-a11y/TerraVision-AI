@@ -1,29 +1,11 @@
 version: "3.9"
 
-# TerraVision AI — Full Local Stack
-#
-# Services
-# ────────
-#   api   → FastAPI REST on http://localhost:8000  (docs at /v1/docs)
-#   app   → Streamlit UI  on http://localhost:8501
-#
-# Quick start
-# ───────────
-#   cp .env.example .env          # fill in your keys
-#   docker compose up --build
-#
-# Individual service
-#   docker compose up api         # REST only
-#   docker compose up app         # Streamlit only
-
 x-common-env: &common-env
   GCP_SERVICE_ACCOUNT_JSON: "${GCP_SERVICE_ACCOUNT_JSON:-}"
   TERRAVISION_ENV: "${TERRAVISION_ENV:-development}"
   PYTHONUNBUFFERED: "1"
 
 services:
-
-  # ── FastAPI REST ─────────────────────────────────────────────────────────────
   api:
     build:
       context: .
@@ -34,7 +16,7 @@ services:
       uvicorn api:app
       --host 0.0.0.0
       --port 8000
-      --workers 2
+      --workers 1
       --log-level info
     ports:
       - "8000:8000"
@@ -43,16 +25,15 @@ services:
       TERRAVISION_API_KEY: "${TERRAVISION_API_KEY:-dev-insecure-key}"
       CORS_ORIGINS: "http://localhost:8501,http://localhost:3000"
     volumes:
-      - ./models:/app/models:ro      # mount model checkpoint read-only
+      - ./models:/app/models:ro
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 20s
 
-  # ── Streamlit App ─────────────────────────────────────────────────────────────
   app:
     build:
       context: .
@@ -76,7 +57,6 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-volumes: {}
 networks:
   default:
     name: terravision-net
