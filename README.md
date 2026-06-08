@@ -1,12 +1,12 @@
 # 🛰️ TerraVision AI
 
 <div align="center">
+
 ```
                     ╔══════════════════════════════════════════════════════════════════════════╗
                     ║           TerraVision AI — Satellite-Native Crop Intelligence            ║
                     ║       Spatio-Temporal Transformer · Live Sentinel-2 · IPCC Carbon        ║
                     ╚══════════════════════════════════════════════════════════════════════════╝
-
 ```
 
 [![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-Streamlit_Cloud-FF4B4B?style=for-the-badge&logo=streamlit)](https://terravision-ai-ahjzofhbfw675mapqbbdgg.streamlit.app)
@@ -16,6 +16,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-REST_API-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://hub.docker.com/)
 [![License: CC BY 4.0](https://img.shields.io/badge/License-CC_BY_4.0-lightgrey?style=for-the-badge)](https://creativecommons.org/licenses/by/4.0/)
+[![Stars](https://img.shields.io/github/stars/ahmedabbas52233-a11y/TerraVision-AI?style=for-the-badge&color=gold)](https://github.com/ahmedabbas52233-a11y/TerraVision-AI/stargazers)
 
 **An open-source framework combining live Sentinel-2 satellite streams, Spatio-Temporal Transformer inference, and IPCC-aligned carbon modeling — deployed as a public web app.**
 
@@ -48,6 +49,7 @@
 - [Inference Results by Region](#-inference-results-by-region)
 - [Carbon Sequestration Module](#-carbon-sequestration-module)
 - [NDVI Health Classification](#-ndvi-health-classification)
+- [Enhancements in v3.0.0](#-enhancements-in-v300)
 - [Enhancements in v2.0](#-enhancements-in-v20)
 - [Comparative Benchmarking](#-comparative-benchmarking)
 - [Citation](#-citation)
@@ -134,7 +136,7 @@ class TerraVisionTransformer(torch.nn.Module):
 
 ```bash
 # 1. Clone
-git clone https://github.com/ahmedabbas52233/TerraVision-AI.git
+git clone https://github.com/ahmedabbas52233-a11y/TerraVision-AI.git
 cd TerraVision-AI
 
 # 2. Install dependencies
@@ -169,9 +171,7 @@ uvicorn api:app --host 0.0.0.0 --port 8000 --reload
 curl http://localhost:8000/health
 
 # Crop yield inference (JSON)
-curl -s -X POST http://localhost:8000/predict \
-     -H "Content-Type: application/json" \
-     -d '{"lat":31.5204,"lon":74.3587,"crop":"Wheat","include_report":true}'
+curl -s -X POST http://localhost:8000/predict      -H "Content-Type: application/json"      -d '{"lat":31.5204,"lon":74.3587,"crop":"Wheat","include_report":true}'
 ```
 
 **Example `/predict` response:**
@@ -208,8 +208,7 @@ docker build -t terravision-ai .
 docker run -p 8501:8501 -e GCP_SERVICE_ACCOUNT_JSON='{"type":"service_account",...}' terravision-ai
 
 # FastAPI REST
-docker run -p 8000:8000 -e GCP_SERVICE_ACCOUNT_JSON='{"type":"service_account",...}' \
-  terravision-ai uvicorn api:app --host 0.0.0.0 --port 8000
+docker run -p 8000:8000 -e GCP_SERVICE_ACCOUNT_JSON='{"type":"service_account",...}'   terravision-ai uvicorn api:app --host 0.0.0.0 --port 8000
 ```
 
 ---
@@ -218,7 +217,7 @@ docker run -p 8000:8000 -e GCP_SERVICE_ACCOUNT_JSON='{"type":"service_account",.
 
 ### Web App
 
-1. Open the [Live Demo](https://terravision-ai.streamlit.app/)
+1. Open the [Live Demo](https://terravision-ai-ahjzofhbfw675mapqbbdgg.streamlit.app)
 2. Enter **Latitude & Longitude** (decimal degrees)
 3. Select **Crop Type** — Wheat / Rice / Maize / Soybean
 4. Click **🚀 Run Live Inference**
@@ -256,18 +255,18 @@ print(f"Carbon : {raw * 0.47:.2f} Mg C/ha")
 
 | Fig. 1 — Live Inference | Fig. 2 — Multi-Modal Insights |
 |:---:|:---:|
-| ![Wheat USA Part 1](https://github.com/ahmedabbas52233/TerraVision-AI/blob/main/screenshots/Wheat%20(USA%20-%20High%20Greenery)%20Part%201.PNG?raw=true) | ![Wheat USA Part 2](https://github.com/ahmedabbas52233/TerraVision-AI/blob/main/screenshots/Wheat%20(USA%20-%20High%20Greenery)%20Part%202.PNG?raw=true) |
+| ![Wheat USA Part 1](Screenshots/Wheat%20(USA%20-%20High%20Greenery)%20Part%201.PNG?raw=true) | ![Wheat USA Part 2](Screenshots/Wheat%20(USA%20-%20High%20Greenery)%20Part%202.PNG?raw=true) |
 
 > Active photosynthetic growth. Transformer predicted **3.57 t/ha**. Status: **🔵 Normal Growth**. Confidence: **94.2 %**.
 
 ---
 
 ### 🌾 Wheat — Ukraine (Low Greenery)
-**Coordinates:** `49.5883°N, 34.5514°E` · **NDVI:** `0.13` · **Yield:** `3.10 t/ha` · **Carbon:** `1.46 Mg C/ha`
+**Coordinates:** `49.5883°N, 34.5514°E` · **NDVI:** `0.13` · **Yield:** `3.10 t/ha` · **Carbon:** `1.46 Mg C/ha**
 
 | Fig. 3 — Live Inference | Fig. 4 — Multi-Modal Insights |
 |:---:|:---:|
-| ![Wheat Ukraine Part 1](https://github.com/ahmedabbas52233-a11y/TerraVision-AI/blob/main/Screenshots/Ukrain-Wheat.png) | ![Wheat Ukraine Part 2](https://github.com/ahmedabbas52233-a11y/TerraVision-AI/blob/main/Screenshots/Ukrain-Wheat1.png) |
+| ![Wheat Ukraine Part 1](Screenshots/Ukrain-Wheat.png) | ![Wheat Ukraine Part 2](Screenshots/Ukrain-Wheat1.png) |
 
 > Sparse vegetation (NDVI = **0.13**). Yield adjusted to **3.10 t/ha**. Status: **🔴 Critical Monitoring** → Nitrogen-based soil enrichment recommended.
 
@@ -278,7 +277,7 @@ print(f"Carbon : {raw * 0.47:.2f} Mg C/ha")
 
 | Fig. 5 — Live Inference | Fig. 6 — Multi-Modal Insights |
 |:---:|:---:|
-| ![Rice China Part 1](https://github.com/ahmedabbas52233/TerraVision-AI/blob/main/screenshots/Rice%20(China%20-%20Water%20and%20Bare%20Soil%20Area)%20Part%201.PNG?raw=true) | ![Rice China Part 2](https://github.com/ahmedabbas52233/TerraVision-AI/blob/main/screenshots/Rice%20(China%20-%20Water%20and%20Bare%20Soil%20Area)%20Part%202.PNG?raw=true) |
+| ![Rice China Part 1](Screenshots/Rice%20(China%20-%20Water%20and%20Bare%20Soil%20Area)%20Part%201.PNG?raw=true) | ![Rice China Part 2](Screenshots/Rice%20(China%20-%20Water%20and%20Bare%20Soil%20Area)%20Part%202.PNG?raw=true) |
 
 > NDVI **0.05** → water-logged or bare-soil surface. Bare-soil penalty applied → **0.89 t/ha**. Demonstrates robust edge-case handling.
 
@@ -289,7 +288,7 @@ print(f"Carbon : {raw * 0.47:.2f} Mg C/ha")
 
 | Fig. 7 — Live Inference | Fig. 8 — Multi-Modal Insights |
 |:---:|:---:|
-| ![Maize Brazil Part 1](https://github.com/ahmedabbas52233/TerraVision-AI/blob/main/screenshots/Maize%20(Brazil%20-%20Ultra%20High%20Greenery)%20Part%201.PNG?raw=true) | ![Maize Brazil Part 2](https://github.com/ahmedabbas52233/TerraVision-AI/blob/main/screenshots/Maize%20(Brazil%20-%20Ultra%20High%20Greenery)%20Part%202.PNG?raw=true) |
+| ![Maize Brazil Part 1](Screenshots/Maize%20(Brazil%20-%20Ultra%20High%20Greenery)%20Part%201.PNG?raw=true) | ![Maize Brazil Part 2](Screenshots/Maize%20(Brazil%20-%20Ultra%20High%20Greenery)%20Part%202.PNG?raw=true) |
 
 > Peak NDVI **0.66** → outstanding yield of **7.41 t/ha**. Status: **🟢 High Photosynthetic Activity**.
 
@@ -300,7 +299,7 @@ print(f"Carbon : {raw * 0.47:.2f} Mg C/ha")
 
 | Fig. 9 — Live Inference | Fig. 10 — Multi-Modal Insights |
 |:---:|:---:|
-| ![Maize Kenya Part 1](https://github.com/ahmedabbas52233/TerraVision-AI/blob/main/screenshots/Maize%20(Kenya%20-%20Moderate%20Fields)%20Part%201.PNG?raw=true) | ![Maize Kenya Part 2](https://github.com/ahmedabbas52233/TerraVision-AI/blob/main/screenshots/Maize%20(Kenya%20-%20Moderate%20Fields)%20Part%202.PNG?raw=true) |
+| ![Maize Kenya Part 1](Screenshots/Maize%20(Kenya%20-%20Moderate%20Fields)%20Part%201.PNG?raw=true) | ![Maize Kenya Part 2](Screenshots/Maize%20(Kenya%20-%20Moderate%20Fields)%20Part%202.PNG?raw=true) |
 
 > Balanced NDVI **0.52** → reliable **6.54 t/ha** forecast. Status: **🔵 Normal Growth Cycle**.
 
@@ -401,9 +400,8 @@ C_ag = ŷ × BCEF × CF ≈ ŷ × 0.47   (Mg C/ha)
                Framework for Global Crop Yield Intelligence and Carbon Modeling},
   author    = {Hussain, Ahmad Abbas},
   year      = {2026},
-
-  doi       = {github.com/ahmedabbas52233/TerraVision-AI},
-  url       = {https://github.com/ahmedabbas52233/TerraVision-AI}
+  doi       = {github.com/ahmedabbas52233-a11y/TerraVision-AI},
+  url       = {https://github.com/ahmedabbas52233-a11y/TerraVision-AI}
 }
 ```
 
@@ -414,11 +412,11 @@ C_ag = ŷ × BCEF × CF ≈ ŷ × 0.47   (Mg C/ha)
   title     = {TerraVision AI: Satellite-Native Crop Intelligence at Planetary Scale},
   author    = {Hussain, Ahmad Abbas},
   year      = {2026},
-  license = {CC-BY-4.0},
-  month = jun,
-  version = {1.0.0},
-  doi       = {github.com/ahmedabbas52233/TerraVision-AI},
-  url       = {https://github.com/ahmedabbas52233/TerraVision-AI}
+  license   = {CC-BY-4.0},
+  month     = jun,
+  version   = {1.0.0},
+  doi       = {github.com/ahmedabbas52233-a11y/TerraVision-AI},
+  url       = {https://github.com/ahmedabbas52233-a11y/TerraVision-AI}
 }
 ```
 
@@ -429,17 +427,16 @@ C_ag = ŷ × BCEF × CF ≈ ŷ × 0.47   (Mg C/ha)
 Contributions are warmly welcomed! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 **Good first issues:**
--Add ERA5 precipitation data to the feature vector
--Implement time-series NDVI charting (Plotly)
--Add CSV batch-processing mode
--Add NDVI heatmap overlay on the Folium map
--Translate the UI to Arabic / Spanish / French
+- Implement time-series NDVI charting (Plotly)
+- Add CSV batch-processing mode
+- Add multilingual UI — Arabic, Spanish, or French sidebar translations
+- Unit tests for `train.py` — pytest tests for `generate_dataset`, `compute_metrics`, `mc_dropout_predict`
 
 **High-impact contributions:**
--Field boundary delineation via GeoJSON upload
--FastAPI REST wrapper for programmatic access
--Historical yield trend analysis (multi-year Sentinel-2)
--Confidence interval estimation for yield predictions
+- Field boundary delineation via GeoJSON upload
+- Historical yield trend analysis (multi-year Sentinel-2 composites with animated Plotly chart)
+- Confidence interval estimation — expose MC Dropout std at inference time in API response
+- PostgreSQL inference log — `/v1/history` endpoint backed by async SQLAlchemy
 
 ---
 
@@ -457,9 +454,6 @@ Contributions are warmly welcomed! See [CONTRIBUTING.md](CONTRIBUTING.md) for gu
 | GitHub | [ahmedabbas52233](https://github.com/ahmedabbas52233) |
 
 [![LinkedIn](https://img.shields.io/badge/LinkedIn-Connect-0077B5?style=flat-square&logo=linkedin)](https://www.linkedin.com/in/ahmad-abbas-hussain-7000151a3/)
-[![GitHub](https://img.shields.io/badge/GitHub-ahmedabbas52233-181717?style=flat-square&logo=github)](https://github.com/ahmedabbas52233)
-
-
 [![GitHub](https://img.shields.io/badge/GitHub-ahmedabbas52233-181717?style=flat-square&logo=github)](https://github.com/ahmedabbas52233)
 
 </div>
