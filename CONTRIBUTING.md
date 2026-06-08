@@ -92,7 +92,10 @@ Label: `enhancement`
 - **PostgreSQL inference log** — `/v1/history` endpoint backed by async SQLAlchemy
 
 ---
+## Security
+Please do not open public issues for security problems. Email ahmedabbas52233@gmail.com directly.
 
+---
 ## License
 
 By contributing, you agree your work is released under the same **CC BY 4.0** licence as this project.
