@@ -9,7 +9,6 @@ COPY requirements.txt .
 
 # Install CPU-only torch first, then everything else from requirements
 RUN pip install --upgrade pip \
- && pip install --user torch --index-url https://download.pytorch.org/whl/cpu \
  && pip install --user --no-cache-dir -r requirements.txt
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────

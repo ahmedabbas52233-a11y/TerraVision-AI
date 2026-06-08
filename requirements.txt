@@ -35,8 +35,3 @@ pytest>=8.2.0
 pytest-asyncio>=0.23.0
 pytest-cov>=5.0.0
 pytest-mock>=3.14.0
-
-# ── Optional: plotting & geospatial ───────────────────────────────────────────
-plotly>=5.22.0          # for NDVI time-series charts (mentioned in roadmap)
-geopandas>=0.14.0       # for GeoJSON field boundary uploads
-shapely>=2.0.0          # geospatial geometry operations
