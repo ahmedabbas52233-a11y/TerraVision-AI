@@ -13,6 +13,10 @@ build/
 venv/
 env/
 
+# Node.js
+node_modules/
+frontend/node_modules/
+
 # Streamlit
 .streamlit/secrets.toml
 
@@ -51,4 +55,4 @@ logs/
 Reports/
 
 # Zip
-*.zip
+*.zipmake_secrets.py

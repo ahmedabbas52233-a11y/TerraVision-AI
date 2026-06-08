@@ -1,12 +1,11 @@
 # 🛰️ TerraVision AI
 
 <div align="center">
-
 ```
-╔══════════════════════════════════════════════════════════════════════════╗
-║           TerraVision AI — Satellite-Native Crop Intelligence            ║
-║       Spatio-Temporal Transformer · Live Sentinel-2 · IPCC Carbon       ║
-╚══════════════════════════════════════════════════════════════════════════╝
+                    ╔══════════════════════════════════════════════════════════════════════════╗
+                    ║           TerraVision AI — Satellite-Native Crop Intelligence            ║
+                    ║       Spatio-Temporal Transformer · Live Sentinel-2 · IPCC Carbon        ║
+                    ╚══════════════════════════════════════════════════════════════════════════╝
 ```
 
 [![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-Streamlit_Cloud-FF4B4B?style=for-the-badge&logo=streamlit)](https://terravision-ai-ahjzofhbfw675mapqbbdgg.streamlit.app)
@@ -20,7 +19,7 @@
 
 **The only open-source framework combining live Sentinel-2 satellite streams, Spatio-Temporal Transformer inference, and IPCC-aligned carbon modeling — deployed as a public web app.**
 
-*Developed by [Ahmad Abbas Hussain](mailto:ahmedabbas52233@gmail.com) · *
+*Developed by [Ahmad Abbas Hussain](mailto:ahmedabbas52233@gmail.com)*
 
 </div>
 
@@ -219,7 +218,7 @@ docker run -p 8000:8000 -e GCP_SERVICE_ACCOUNT_JSON='{"type":"service_account",.
 
 ### Web App
 
-1. Open the [Live Demo](https://terravision-ai-ahjzofhbfw675mapqbbdgg.streamlit.app)
+1. Open the [Live Demo](https://terravision-ai.streamlit.app)
 2. Enter **Latitude & Longitude** (decimal degrees)
 3. Select **Crop Type** — Wheat / Rice / Maize / Soybean
 4. Click **🚀 Run Live Inference**
@@ -348,7 +347,7 @@ C_ag = ŷ × BCEF × CF ≈ ŷ × 0.47   (Mg C/ha)
 ## 🆕 Enhancements in v2.0
 
 | # | Change | Impact |
-|---|---|---|
+| --- | --- | --- |
 | 1 | **GELU activation** (replaces ReLU) | Better gradient flow in transformer FFN |
 | 2 | **Dropout (p=0.10)** in FFN | Improved generalization |
 | 3 | **Xavier weight initialisation** | Faster, more stable training convergence |
@@ -365,7 +364,7 @@ C_ag = ŷ × BCEF × CF ≈ ŷ × 0.47   (Mg C/ha)
 ## 🏆 Comparative Benchmarking
 
 | Method | Architecture | Real-Time EO | Carbon Est. | Confidence |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | Xu et al. [2014] | LSTM | ❌ | ❌ | ~85 % |
 | Tseng et al. [2021] | Transformer Enc. | ❌ | ❌ | ~88 % |
 | Wang et al. [2022] | Graph Attention | ❌ | ❌ | ~87 % |
@@ -376,7 +375,7 @@ C_ag = ŷ × BCEF × CF ≈ ŷ × 0.47   (Mg C/ha)
 ## 📦 Dataset & Experimental Setup
 
 | Parameter | Value |
-|---|---|
+| --- | --- |
 | Framework | PyTorch 2.x |
 | Activation | GELU (v2.0) |
 | Optimiser | Adam (lr = 1e-3, weight_decay = 1e-4) |
@@ -411,13 +410,15 @@ C_ag = ŷ × BCEF × CF ≈ ŷ × 0.47   (Mg C/ha)
 **Cite the software:**
 
 ```bibtex
-@software{abbas2026terravision_software,
-  title     = {TerraVision AI v2.0.0 — Production Release},
-  author    = {Ahmad Abbas Hussain},
+@software{Hussain_TerraVision_AI_Satellite-Native_2026,
+  title     = {TerraVision AI: Satellite-Native Crop Intelligence at Planetary Scale},
+  author    = {Hussain, Ahmad Abbas},
   year      = {2026},
-
+  license = {CC-BY-4.0},
+  month = jun,
+  version = {1.0.0},
   doi       = {github.com/ahmedabbas52233/TerraVision-AI},
-  url       = {https://github.com/ahmedabbas52233/TerraVision-AI/releases/tag/v1.0.0}
+  url       = {https://github.com/ahmedabbas52233/TerraVision-AI}
 }
 ```
 
@@ -428,17 +429,17 @@ C_ag = ŷ × BCEF × CF ≈ ŷ × 0.47   (Mg C/ha)
 Contributions are warmly welcomed! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 **Good first issues:**
-- Add ERA5 precipitation data to the feature vector
-- Implement time-series NDVI charting (Plotly)
-- Add CSV batch-processing mode
-- Add NDVI heatmap overlay on the Folium map
-- Translate the UI to Arabic / Spanish / French
+-Add ERA5 precipitation data to the feature vector
+-Implement time-series NDVI charting (Plotly)
+-Add CSV batch-processing mode
+-Add NDVI heatmap overlay on the Folium map
+-Translate the UI to Arabic / Spanish / French
 
 **High-impact contributions:**
-- Field boundary delineation via GeoJSON upload
-- FastAPI REST wrapper for programmatic access
-- Historical yield trend analysis (multi-year Sentinel-2)
-- Confidence interval estimation for yield predictions
+-Field boundary delineation via GeoJSON upload
+-FastAPI REST wrapper for programmatic access
+-Historical yield trend analysis (multi-year Sentinel-2)
+-Confidence interval estimation for yield predictions
 
 ---
 
@@ -447,7 +448,7 @@ Contributions are warmly welcomed! See [CONTRIBUTING.md](CONTRIBUTING.md) for gu
 <div align="center">
 
 ### Ahmad Abbas Hussain
-**AI & Full-Stack Developer · ML Engineer**
+**AI & Full-Stack Developer**
 
 | Contact | Link |
 |---|---|
