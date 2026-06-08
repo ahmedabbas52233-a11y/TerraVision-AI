@@ -35,3 +35,8 @@ pytest>=8.2.0
 pytest-asyncio>=0.23.0
 pytest-cov>=5.0.0
 pytest-mock>=3.14.0
+
+# ── Optional: uncomment when you implement these features ─────────────────────
+# plotly>=5.22.0
+# geopandas>=0.14.0
+# shapely>=2.0.0
