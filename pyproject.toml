@@ -1,84 +1,84 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires      = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.backends.legacy:build"
 
 # ─────────────────────────────────────────────────────────────────────────────
 [project]
-name = "terravision-ai"
-version = "1.0.0"
+name        = "terravision-ai"
+version     = "1.0.0"
 description = "Satellite-native crop yield intelligence · ST-Transformer · Sentinel-2 · ERA5"
-readme = "README.md"
-license = { file = "LICENSE" }
-authors = [
-    { name = "Ahmad Abbas Hussain", email = "ahmedabbas52233@gmail.com" }
+readme      = "README.md"
+license     = { file = "LICENSE" }
+authors     = [
+  { name = "Ahmad Abbas Hussain", email = "ahmedabbas52233@gmail.com" }
 ]
-keywords = [
-    "precision agriculture", "satellite imagery", "crop yield prediction",
-    "spatio-temporal transformer", "google earth engine", "ndvi",
-    "carbon sequestration", "remote sensing", "deep learning"
+keywords    = [
+  "precision agriculture", "satellite imagery", "crop yield prediction",
+  "spatio-temporal transformer", "google earth engine", "ndvi",
+  "carbon sequestration", "remote sensing", "deep learning"
 ]
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
-    "Intended Audience :: Science/Research",
-    "License :: Other/Proprietary License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.11",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "Topic :: Scientific/Engineering :: GIS",
+  "Development Status :: 5 - Production/Stable",
+  "Intended Audience :: Science/Research",
+  "License :: Other/Proprietary License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Scientific/Engineering :: GIS",
 ]
 requires-python = ">=3.11"
-dependencies = [
-    "streamlit>=1.35.0",
-    "streamlit-folium>=0.20.0",
-    "earthengine-api>=0.1.390",
-    "torch>=2.0.0",
-    "numpy>=1.24.0",
-    "scikit-learn>=1.4.0",
-    "folium>=0.15.0",
-    "fastapi>=0.111.0",
-    "uvicorn[standard]>=0.29.0",
-    "pydantic>=2.7.0",
-    "slowapi>=0.1.9",
-    "httpx>=0.27.0",
+dependencies    = [
+  "streamlit>=1.35.0",
+  "streamlit-folium>=0.20.0",
+  "earthengine-api>=0.1.390",
+  "torch>=2.0.0",
+  "numpy>=1.24.0",
+  "scikit-learn>=1.4.0",
+  "folium>=0.15.0",
+  "fastapi>=0.111.0",
+  "uvicorn[standard]>=0.29.0",
+  "pydantic>=2.7.0",
+  "slowapi>=0.1.9",
+  "httpx>=0.27.0",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.2.0",
-    "pytest-asyncio>=0.23.0",
-    "pytest-cov>=5.0.0",
-    "pytest-mock>=3.14.0",
-    "black>=24.0.0",
-    "ruff>=0.4.0",
-    "pip-audit>=2.7.0",
+  "pytest>=8.2.0",
+  "pytest-asyncio>=0.23.0",
+  "pytest-cov>=5.0.0",
+  "pytest-mock>=3.14.0",
+  "black>=24.0.0",
+  "ruff>=0.4.0",
+  "pip-audit>=2.7.0",
 ]
 
 [project.urls]
-Homepage = "https://github.com/ahmedabbas52233/TerraVision-AI"
+Homepage   = "https://github.com/ahmedabbas52233/TerraVision-AI"
 Repository = "https://github.com/ahmedabbas52233/TerraVision-AI"
-Issues = "https://github.com/ahmedabbas52233/TerraVision-AI/issues"
-Demo = "https://terravision-ai.streamlit.app"
+Issues     = "https://github.com/ahmedabbas52233/TerraVision-AI/issues"
+Demo       = "https://terravision-ai.streamlit.app"
 
 [project.scripts]
 terravision-train = "terravision.train:main"
 
 # ─────────────────────────────────────────────────────────────────────────────
 [tool.black]
-line-length = 90
+line-length    = 90
 target-version = ["py311"]
 skip-magic-trailing-comma = false
 
 # ─────────────────────────────────────────────────────────────────────────────
 [tool.ruff]
-line-length = 90
+line-length    = 90
 target-version = "py311"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
-ignore = [
-    "E501",  # line too long (black handles this)
-    "B008",  # do not perform function calls in default arguments
-    "UP007",  # use X | Y for type annotations (keep Optional for clarity)
+select  = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
+ignore  = [
+  "E501",   # line too long (black handles this)
+  "B008",   # do not perform function calls in default arguments
+  "UP007",  # use X | Y for type annotations (keep Optional for clarity)
 ]
 
 [tool.ruff.lint.isort]
@@ -86,35 +86,36 @@ known-first-party = ["terravision"]
 
 # ─────────────────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
-asyncio_mode = "auto"
-testpaths = ["tests"]
-python_files = ["test_*.py"]
+asyncio_mode   = "auto"
+testpaths      = ["tests"]
+python_files   = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = [
-    "--strict-markers",
-    "--tb=short",
-    "-q",
-    "--cov=terravision",
-    "--cov=api",
-    "--cov-report=term-missing",
-    "--cov-report=html:htmlcov",
-    "--cov-fail-under=60",
-]
+addopts = """
+  --strict-markers
+  --tb=short
+  -q
+  --cov=terravision
+  --cov=api
+  --cov-report=term-missing
+  --cov-report=html:htmlcov
+  --cov-fail-under=80
+"""
 markers = [
-    "slow: marks tests as slow-running",
-    "integration: marks tests that require live GEE access",
+  "slow: marks tests as slow-running",
+  "integration: marks tests that require live GEE access",
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
 [tool.coverage.run]
-source = ["terravision", "api"]
-omit = ["tests/*", "*/migrations/*", ".venv/*"]
+source   = ["terravision", "api"]
+omit     = ["tests/*", "*/migrations/*", ".venv/*",
+            "terravision/train.py", "train.py"]
 
 [tool.coverage.report]
 exclude_lines = [
-    "pragma: no cover",
-    "if __name__ == .__main__.:",
-    "raise NotImplementedError",
-    '\.\.\.',
+  "pragma: no cover",
+  "if __name__ == .__main__.:",
+  "raise NotImplementedError",
+  "\\.\\.\\.",
 ]
