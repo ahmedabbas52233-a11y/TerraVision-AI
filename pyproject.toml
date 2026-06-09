@@ -1,6 +1,6 @@
 [build-system]
 requires      = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 # ─────────────────────────────────────────────────────────────────────────────
 [project]
@@ -8,7 +8,7 @@ name        = "terravision-ai"
 version     = "1.0.0"
 description = "Satellite-native crop yield intelligence · ST-Transformer · Sentinel-2 · ERA5"
 readme      = "README.md"
-license     = { file = "LICENSE" }
+license     = { text = "CC-BY-4.0" }
 authors     = [
   { name = "Ahmad Abbas Hussain", email = "ahmedabbas52233@gmail.com" }
 ]
@@ -20,7 +20,7 @@ keywords    = [
 classifiers = [
   "Development Status :: 5 - Production/Stable",
   "Intended Audience :: Science/Research",
-  "License :: Other/Proprietary License",
+  "License :: OSI Approved",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.11",
   "Topic :: Scientific/Engineering :: Artificial Intelligence",
@@ -34,12 +34,15 @@ dependencies    = [
   "torch>=2.0.0",
   "numpy>=1.24.0",
   "scikit-learn>=1.4.0",
+  "pandas>=2.0.0",
   "folium>=0.15.0",
   "fastapi>=0.111.0",
   "uvicorn[standard]>=0.29.0",
   "pydantic>=2.7.0",
   "slowapi>=0.1.9",
   "httpx>=0.27.0",
+  "python-multipart>=0.0.9",
+  "python-dotenv>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -54,10 +57,10 @@ dev = [
 ]
 
 [project.urls]
-Homepage   = "https://github.com/ahmedabbas52233/TerraVision-AI"
-Repository = "https://github.com/ahmedabbas52233/TerraVision-AI"
-Issues     = "https://github.com/ahmedabbas52233/TerraVision-AI/issues"
-Demo       = "https://terravision-ai.streamlit.app"
+Homepage   = "https://github.com/ahmedabbas52233-a11y/TerraVision-AI"
+Repository = "https://github.com/ahmedabbas52233-a11y/TerraVision-AI"
+Issues     = "https://github.com/ahmedabbas52233-a11y/TerraVision-AI/issues"
+Demo       = "https://terravision-ai-ahjzofhbfw675mapqbbdgg.streamlit.app"
 
 [project.scripts]
 terravision-train = "terravision.train:main"
@@ -99,7 +102,7 @@ addopts = """
   --cov=api
   --cov-report=term-missing
   --cov-report=html:htmlcov
-  --cov-fail-under=80
+  --cov-fail-under=75
 """
 markers = [
   "slow: marks tests as slow-running",

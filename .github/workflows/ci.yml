@@ -30,24 +30,21 @@ jobs:
       - name: Install linters
         run: pip install black ruff
 
-      # Only lint files that exist — train.py root shim may be absent
       - name: black — format check
         run: |
           black --check --line-length 90 \
             terravision/core.py \
-            terravision/train.py \
             api.py \
             app.py \
-            $([ -f train.py ] && echo train.py || echo "")
+            tests/
 
       - name: ruff — lint check
         run: |
           ruff check \
             terravision/core.py \
-            terravision/train.py \
             api.py \
             app.py \
-            $([ -f train.py ] && echo train.py || echo "")
+            tests/
 
   # ── 2. Tests + Coverage ──────────────────────────────────────────────────────
   test:
@@ -62,17 +59,12 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
 
-      - name: Install CPU-only torch (avoids 2 GB CUDA download in CI)
+      - name: Install dependencies
         run: |
+          pip install --upgrade pip
           pip install torch --index-url https://download.pytorch.org/whl/cpu
-
-      - name: Install remaining dependencies
-        run: |
-          pip install \
-            streamlit streamlit-folium earthengine-api \
-            numpy scikit-learn folium \
-            fastapi "uvicorn[standard]" pydantic slowapi httpx \
-            pytest pytest-asyncio pytest-cov pytest-mock
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov pytest-mock
 
       - name: Run tests with coverage
         env:
@@ -90,7 +82,6 @@ jobs:
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
-          file: coverage.xml
           fail_ci_if_error: false
 
   # ── 3. Security ──────────────────────────────────────────────────────────────

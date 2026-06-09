@@ -39,6 +39,7 @@ os.environ.setdefault("TERRAVISION_ENV", "development")
 import unittest.mock as mock
 
 _MOCK_FEATURES = [0.55, 291.5, 0.025]
+_MOCK_FEATURES_V2 = [[0.55, 291.5, 0.025]] * 6  # V2 format (6×3)
 _MOCK_ERA5 = {"temp_c": 20.5, "precip_mm_month": 62.3, "source": "era5-land"}
 _MOCK_TILE_URL = "https://earthengine.googleapis.com/v1alpha/projects/earthengine-legacy/maps/mock-id/tiles/{z}/{x}/{y}"
 
@@ -71,18 +72,19 @@ def client():
 def mock_inference():
     """
     Patch all GEE / torch calls so /predict runs fully offline.
-    Returns a context manager that yields the three patch objects.
+    Uses TerraVisionTransformerV2 so tensor shapes match _IS_V2=True.
     """
-    from terravision.core import TerraVisionTransformer
+    from terravision.core import TerraVisionTransformerV2
 
-    fake_model = TerraVisionTransformer()
+    fake_model = TerraVisionTransformerV2()
     fake_model.eval()
 
     with (
         patch("api._MODEL", fake_model),
         patch("api._MODEL_READY", True),
         patch("api._GEE_READY", True),
-        patch("api.get_live_features", return_value=_MOCK_FEATURES),
+        patch("api._IS_V2", True),
+        patch("api.get_live_features_v2", return_value=_MOCK_FEATURES_V2),
         patch("api.get_era5_features", return_value=_MOCK_ERA5),
         patch("api.get_ndvi_tile_url", return_value=_MOCK_TILE_URL),
     ):
@@ -99,9 +101,10 @@ class TestPublicEndpoints:
         assert r.status_code == 200
 
     def test_root_contains_version(self, client):
+        from terravision.core import MODEL_VERSION
         body = client.get("/v1/").json()
         assert "version" in body
-        assert "3" in body["version"]
+        assert body["version"] == MODEL_VERSION
 
     def test_root_contains_docs_link(self, client):
         body = client.get("/v1/").json()
@@ -343,8 +346,9 @@ class TestPredictSuccess:
         assert body["carbon_fraction"] == pytest.approx(0.47, abs=1e-6)
 
     def test_predict_model_version_in_response(self, client, mock_inference):
+        from terravision.core import MODEL_VERSION
         body = client.post("/v1/predict", json=VALID_PAYLOAD, headers=HEADERS_OK).json()
-        assert "3" in body["model_version"]
+        assert body["model_version"] == MODEL_VERSION
 
     def test_predict_inference_ms_positive(self, client, mock_inference):
         body = client.post("/v1/predict", json=VALID_PAYLOAD, headers=HEADERS_OK).json()

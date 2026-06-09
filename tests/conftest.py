@@ -3,6 +3,7 @@ tests/conftest.py
 Shared pytest fixtures for TerraVision AI test suite.
 Available to all test files without explicit import.
 """
+
 from __future__ import annotations
 
 import os
@@ -28,6 +29,7 @@ os.environ.setdefault("TERRAVISION_ENV", "development")
 def fresh_model():
     """A freshly initialised TerraVisionTransformer with random weights."""
     from terravision.core import TerraVisionTransformer
+
     m = TerraVisionTransformer(input_dim=3, model_dim=64)
     m.eval()
     return m
@@ -58,6 +60,7 @@ def all_crops() -> list[str]:
 # API CLIENT FIXTURES
 # ─────────────────────────────────────────────────────────────────────────────
 _MOCK_FEATURES = [0.55, 291.5, 0.025]
+_MOCK_FEATURES_V2 = [[0.55, 291.5, 0.025]] * 6  # V2 format (6×3)
 _MOCK_ERA5 = {"temp_c": 20.5, "precip_mm_month": 62.3, "source": "era5-land"}
 _MOCK_TILE_URL = "https://earthengine.googleapis.com/v1alpha/projects/earthengine-legacy/maps/mock-id/tiles/{z}/{x}/{y}"
 
@@ -69,12 +72,13 @@ def api_client():
     Safe to use in CI without any GEE credentials.
 
     CRITICAL: We must patch _IS_V2 and import api INSIDE the patch context
-    so that api.py evaluates _IS_V2 based on our mocked V1 model.
+    so that api.py evaluates _IS_V2 based on our mocked V2 model.
     """
     from fastapi.testclient import TestClient
-    from terravision.core import TerraVisionTransformer
 
-    fake_model = TerraVisionTransformer(input_dim=3, model_dim=64)
+    from terravision.core import TerraVisionTransformerV2
+
+    fake_model = TerraVisionTransformerV2()
     fake_model.eval()
 
     # Patch at module level BEFORE importing api
@@ -82,15 +86,13 @@ def api_client():
         patch("api._MODEL", fake_model),
         patch("api._MODEL_READY", True),
         patch("api._GEE_READY", True),
-        patch("api._IS_V2", False),  # Force V1 code path
-        patch("api.get_live_features", return_value=_MOCK_FEATURES),
+        patch("api._IS_V2", True),  # Force V2 code path
+        patch("api.get_live_features_v2", return_value=_MOCK_FEATURES_V2),
         patch("api.get_era5_features", return_value=_MOCK_ERA5),
         patch("api.get_ndvi_tile_url", return_value=_MOCK_TILE_URL),
     ):
         # Import api AFTER all patches are active
         import api
-        # Force re-evaluation of _IS_V2 in case it was already imported
-        api._IS_V2 = False
 
         with TestClient(api.app, raise_server_exceptions=True) as client:
             yield client
