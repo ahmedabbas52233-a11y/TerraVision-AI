@@ -102,6 +102,7 @@ class TestPublicEndpoints:
 
     def test_root_contains_version(self, client):
         from terravision.core import MODEL_VERSION
+
         body = client.get("/v1/").json()
         assert "version" in body
         assert body["version"] == MODEL_VERSION
@@ -347,6 +348,7 @@ class TestPredictSuccess:
 
     def test_predict_model_version_in_response(self, client, mock_inference):
         from terravision.core import MODEL_VERSION
+
         body = client.post("/v1/predict", json=VALID_PAYLOAD, headers=HEADERS_OK).json()
         assert body["model_version"] == MODEL_VERSION
 
