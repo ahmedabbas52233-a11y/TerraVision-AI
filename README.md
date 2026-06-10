@@ -17,6 +17,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://hub.docker.com/)
 [![License: CC BY 4.0](https://img.shields.io/badge/License-CC_BY_4.0-lightgrey?style=for-the-badge)](https://creativecommons.org/licenses/by/4.0/)
 [![Stars](https://img.shields.io/github/stars/ahmedabbas52233-a11y/TerraVision-AI?style=for-the-badge&color=gold)](https://github.com/ahmedabbas52233-a11y/TerraVision-AI/stargazers)
+[![🛰️ TerraVision AI — CI](https://github.com/ahmedabbas52233-a11y/TerraVision-AI/actions/workflows/ci.yml/badge.svg)](https://github.com/ahmedabbas52233-a11y/TerraVision-AI/actions/workflows/ci.yml)
 
 **An open-source framework combining live Sentinel-2 satellite streams, Spatio-Temporal Transformer inference, and IPCC-aligned carbon modeling — deployed as a public web app.**
 
