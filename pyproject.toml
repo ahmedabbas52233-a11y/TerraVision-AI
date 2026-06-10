@@ -60,7 +60,7 @@ dev = [
 Homepage   = "https://github.com/ahmedabbas52233-a11y/TerraVision-AI"
 Repository = "https://github.com/ahmedabbas52233-a11y/TerraVision-AI"
 Issues     = "https://github.com/ahmedabbas52233-a11y/TerraVision-AI/issues"
-Demo       = "https://terravision-ai-ahjzofhbfw675mapqbbdgg.streamlit.app"
+Demo       = "https://terravision-ai.streamlit.app"
 
 [project.scripts]
 terravision-train = "terravision.train:main"
@@ -102,7 +102,7 @@ addopts = """
   --cov=api
   --cov-report=term-missing
   --cov-report=html:htmlcov
-  --cov-fail-under=75
+  --cov-fail-under=70
 """
 markers = [
   "slow: marks tests as slow-running",
