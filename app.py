@@ -313,7 +313,9 @@ def _init_ee() -> None:
     import contextlib
 
     with contextlib.suppress(Exception):
-        secret_json = st.secrets.get("GCP_SERVICE_ACCOUNT_JSON") or st.secrets.get("GCP_SERVICE_ACCOUNT")
+        secret_json = st.secrets.get("GCP_SERVICE_ACCOUNT_JSON") or st.secrets.get(
+            "GCP_SERVICE_ACCOUNT"
+        )
 
     # ── 3. Environment variable (Docker / Railway / local .env) ─────────────
     if not secret_json:
