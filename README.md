@@ -9,7 +9,7 @@
                     ╚══════════════════════════════════════════════════════════════════════════╝
 ```
 
-[![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-Streamlit_Cloud-FF4B4B?style=for-the-badge&logo=streamlit)](https://terravision-ai-ahjzofhbfw675mapqbbdgg.streamlit.app)
+[![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-Streamlit_Cloud-FF4B4B?style=for-the-badge&logo=streamlit)](https://terravision-ai.streamlit.app)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.x-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![Google Earth Engine](https://img.shields.io/badge/Google_Earth_Engine-Sentinel--2_+_ERA5-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://earthengine.google.com/)
@@ -17,6 +17,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://hub.docker.com/)
 [![License: CC BY 4.0](https://img.shields.io/badge/License-CC_BY_4.0-lightgrey?style=for-the-badge)](https://creativecommons.org/licenses/by/4.0/)
 [![Stars](https://img.shields.io/github/stars/ahmedabbas52233-a11y/TerraVision-AI?style=for-the-badge&color=gold)](https://github.com/ahmedabbas52233-a11y/TerraVision-AI/stargazers)
+[![🛰️ TerraVision AI — CI](https://github.com/ahmedabbas52233-a11y/TerraVision-AI/actions/workflows/ci.yml/badge.svg)](https://github.com/ahmedabbas52233-a11y/TerraVision-AI/actions/workflows/ci.yml)
 
 **An open-source framework combining live Sentinel-2 satellite streams, Spatio-Temporal Transformer inference, and IPCC-aligned carbon modeling — deployed as a public web app.**
 
