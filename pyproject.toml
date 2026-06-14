@@ -111,7 +111,7 @@ markers = [
 
 # ─────────────────────────────────────────────────────────────────────────────
 [tool.coverage.run]
-source   = ["terravision", "api"]
+source   = ["terravision", "api", "."]
 omit     = ["tests/*", "*/migrations/*", ".venv/*",
             "terravision/train.py", "train.py"]
 
@@ -120,5 +120,5 @@ exclude_lines = [
   "pragma: no cover",
   "if __name__ == .__main__.:",
   "raise NotImplementedError",
-  "\\.\\.\\.",
+  "\.\.\.",
 ]
