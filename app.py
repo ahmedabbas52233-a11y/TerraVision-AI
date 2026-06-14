@@ -1,7 +1,7 @@
 """
 TerraVision AI — app.py  (Streamlit entry point)
 Author  : Ahmad Abbas Hussain <ahmedabbas52233@gmail.com>
-Version : 3.0.0
+Version : 3.0.1
 License : CC BY 4.0
 
 Fixes applied in this version
@@ -14,6 +14,8 @@ Fixes applied in this version
         instead of always showing three green badges.
 [FIX-5] Demo-mode banner distinguishes between "no credentials" and
         "project not registered" so the user sees an actionable message.
+[FIX-6] GEE initialization now correctly handles Streamlit secrets with
+        explicit project ID and precise error messages.
 """
 
 from __future__ import annotations
@@ -271,10 +273,9 @@ hr { border-color: var(--border) !important; }
 st.markdown(_THEME_CSS, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1 · EARTH ENGINE INITIALISATION
+# 1 · EARTH ENGINE INITIALISATION  (FIX-6)
 # ─────────────────────────────────────────────────────────────────────────────
 
-# Track GEE status for accurate sidebar badges (FIX-4)
 _GEE_STATUS: str = "offline"  # "live" | "demo" | "offline"
 
 
@@ -283,7 +284,7 @@ def _init_ee() -> None:
 
     # ── 1. Application Default Credentials (local dev) ───────────────────────
     try:
-        ee.Initialize()
+        ee.Initialize(project="terravision-ai-498310")
         _GEE_STATUS = "live"
         return
     except Exception:
@@ -316,8 +317,11 @@ def _init_ee() -> None:
     # ── 5. Authenticate with service account ────────────────────────────────
     try:
         info = json.loads(secret_json)
-        creds = ee.ServiceAccountCredentials(info["client_email"], key_data=secret_json)
-        ee.Initialize(creds)
+        creds = ee.ServiceAccountCredentials(
+            info["client_email"],
+            key_data=secret_json,
+        )
+        ee.Initialize(creds, project="terravision-ai-498310")
         _GEE_STATUS = "live"
 
     except json.JSONDecodeError:
@@ -328,9 +332,9 @@ def _init_ee() -> None:
 
     except Exception as exc:
         _GEE_STATUS = "demo"
-        err = str(exc)
-        # FIX-5: distinguish "not registered" from other auth errors
-        if "not registered" in err or "Earth Engine" in err:
+        err = str(exc).lower()
+        # FIX-6: precise error matching instead of broad "Earth Engine" catch
+        if "not registered" in err:
             st.warning(
                 "⚠️ **GEE Project Not Registered** — Demo Mode active.  \n\n"
                 "Your GCP project has not been enabled for Earth Engine.  \n"
@@ -341,8 +345,32 @@ def _init_ee() -> None:
                 "After registration, also ensure your service account is listed "
                 "at [code.earthengine.google.com](https://code.earthengine.google.com)."
             )
+        elif "invalid grant" in err:
+            st.warning(
+                "⚠️ **Invalid Service Account Key** — Demo Mode active.  \n\n"
+                "The service account key is invalid, expired, or the account is disabled.  \n"
+                "**Fix:** Generate a new JSON key in "
+                "[Google Cloud Console → IAM → Service Accounts]"
+                "(https://console.cloud.google.com/iam-admin/serviceaccounts) "
+                "and update your Streamlit secret."
+            )
+        elif "unauthorized" in err or "permission" in err:
+            st.warning(
+                "⚠️ **Service Account Not Authorized** — Demo Mode active.  \n\n"
+                "The service account exists but lacks Earth Engine access.  \n"
+                "**Fix:** Go to [code.earthengine.google.com]"
+                "(https://code.earthengine.google.com) → "
+                "your user icon → Manage Cloud Project → Members → "
+                "add `terravision-ai@terravision-ai-498310.iam.gserviceaccount.com`."
+            )
         else:
-            st.warning(f"⚠️ GEE authentication failed (Demo Mode active): {exc}")
+            st.warning(
+                f"⚠️ **GEE authentication failed** — Demo Mode active.  \n\n"
+                f"Error type: `{type(exc).__name__}`  \n"
+                f"Details: `{exc}`  \n\n"
+                f"If this persists, check that `GCP_SERVICE_ACCOUNT_JSON` "
+                f"in Streamlit Secrets is the complete JSON key file content."
+            )
 
 
 _init_ee()
@@ -362,7 +390,7 @@ def _cached_model():
 # ─────────────────────────────────────────────────────────────────────────────
 
 _DEFAULTS: dict = {
-    "lat": 31.5204,  # FIX-3: lat/lon now live in session_state
+    "lat": 31.5204,
     "lon": 74.3587,
     "ndvi": 0.5,
     "yield_base": 0.0,
@@ -400,7 +428,6 @@ with st.sidebar:
     )
     st.divider()
 
-    # FIX-4: real status badges instead of always-green hardcoded text
     st.markdown("**System Status**")
     _model_obj = _cached_model()
     _gee_icon = (
@@ -458,10 +485,9 @@ col_left, col_right = st.columns([1, 1.55], gap="large")
 with col_left:
     st.subheader("📍 Field Parameters")
 
-    # FIX-3 — explicit key= and on_change clear stale results
     def _on_lat_change() -> None:
         st.session_state["lat"] = st.session_state["_lat_widget"]
-        st.session_state["ran"] = False  # clear stale results
+        st.session_state["ran"] = False
 
     def _on_lon_change() -> None:
         st.session_state["lon"] = st.session_state["_lon_widget"]
@@ -512,17 +538,14 @@ with col_left:
                 "then commit the file and redeploy."
             )
         else:
-            # ── Step 1 : Sentinel-2 NDVI ──────────────────────────────────
             with st.spinner("🛰️ Querying Sentinel-2 NDVI via GEE …"):
                 features = get_live_features(lat, lon, crop)
                 st.session_state["features"] = features
 
-            # ── Step 2 : ERA5-Land climate features ───────────────────────
             with st.spinner("🌡️ Pulling ERA5-Land weather data …"):
                 era5 = get_era5_features(lat, lon)
                 st.session_state["era5"] = era5
 
-            # ── Step 3 : NDVI heatmap tile URL ────────────────────────────
             if show_heatmap:
                 with st.spinner("🗺️ Generating NDVI heatmap tiles …"):
                     ndvi_tile_url = get_ndvi_tile_url(lat, lon)
@@ -530,7 +553,6 @@ with col_left:
             else:
                 st.session_state["ndvi_tile_url"] = None
 
-            # ── Step 4 : Transformer inference ────────────────────────────
             with st.spinner("⚡ Running ST-Transformer …"):
                 tensor = torch.tensor([features], dtype=torch.float32)
                 with torch.no_grad():
@@ -543,7 +565,6 @@ with col_left:
                 )
                 carbon = yield_adj * CARBON_FRACTION
 
-                # Real MC Dropout confidence (not hardcoded)
                 conf_result = mc_dropout_confidence(model, tensor, n_passes=15)
                 confidence_pct = conf_result["confidence_pct"]
                 yield_std = conf_result["std_yield"]
@@ -556,13 +577,12 @@ with col_left:
                     "ran": True,
                     "confidence_pct": confidence_pct,
                     "yield_std": yield_std,
-                    "lat": lat,  # keep in sync
+                    "lat": lat,
                     "lon": lon,
                 }
             )
             st.success("✅ Inference complete!")
 
-            # ── ERA5 badge ─────────────────────────────────────────────────
             _src = era5.get("source", "default")
             _src_label = "ERA5-Land Live" if _src == "era5-land" else "ERA5 Demo Prior"
             st.markdown(
@@ -570,7 +590,6 @@ with col_left:
                 unsafe_allow_html=True,
             )
 
-            # ── Primary metrics ────────────────────────────────────────────
             m1, m2 = st.columns(2)
             m1.metric(
                 "ERA5-Adj. Yield",
@@ -585,14 +604,12 @@ with col_left:
 
             st.divider()
 
-            # ── ERA5 climate panel ─────────────────────────────────────────
             if _src == "era5-land":
                 with st.expander("🌡️ ERA5 Climate Detail", expanded=True):
                     e1, e2 = st.columns(2)
                     e1.metric("Air Temp (2m)", f"{era5['temp_c']:.1f} °C")
                     e2.metric("Monthly Precip", f"{era5['precip_mm_month']:.1f} mm")
 
-            # ── Vegetation health ──────────────────────────────────────────
             label, action, alert_type = ndvi_status(ndvi)
             {
                 "error": st.error,
@@ -605,7 +622,6 @@ with col_left:
             m5.metric("Confidence", f"{confidence_pct:.1f} %")
             m6.metric("Version", f"v{MODEL_VERSION}")
 
-            # ── Download report ────────────────────────────────────────────
             st.markdown("<br>", unsafe_allow_html=True)
             report_txt = build_report(
                 lat,
@@ -628,7 +644,6 @@ with col_left:
             )
 
     elif st.session_state["ran"]:
-        # Show last inference results while user is editing coords
         _ndvi = st.session_state["ndvi"]
         _ybase = st.session_state["yield_base"]
         _yadj = st.session_state["yield_adj"]
@@ -666,7 +681,6 @@ with col_left:
 with col_right:
     st.subheader("🗺️ Satellite Intelligence View")
 
-    # NDVI legend (always visible when heatmap is toggled on)
     if show_heatmap:
         st.markdown(
             """
@@ -694,7 +708,6 @@ with col_right:
             unsafe_allow_html=True,
         )
 
-    # Build Folium map — use session_state lat/lon so map stays in sync
     _map_lat = st.session_state["lat"]
     _map_lon = st.session_state["lon"]
 
@@ -705,7 +718,6 @@ with col_right:
         attr="© Google Maps",
     )
 
-    # NDVI heatmap TileLayer
     ndvi_tile_url = st.session_state.get("ndvi_tile_url")
     if show_heatmap and ndvi_tile_url:
         folium.TileLayer(
@@ -718,7 +730,6 @@ with col_right:
         ).add_to(sat_map)
         folium.LayerControl(collapsed=False).add_to(sat_map)
 
-    # Analysis marker
     _ran = st.session_state["ran"]
     _ndvi_now = st.session_state["ndvi"]
     _yield_adj = st.session_state["yield_adj"]
@@ -741,7 +752,6 @@ with col_right:
         icon=folium.Icon(color="darkgreen", icon="leaf", prefix="fa"),
     ).add_to(sat_map)
 
-    # 500 m analysis buffer
     folium.Circle(
         location=[_map_lat, _map_lon],
         radius=500,
@@ -753,7 +763,6 @@ with col_right:
         tooltip="500 m analysis buffer (GEE · Sentinel-2)",
     ).add_to(sat_map)
 
-    # 10 km ERA5 buffer
     folium.Circle(
         location=[_map_lat, _map_lon],
         radius=10_000,
