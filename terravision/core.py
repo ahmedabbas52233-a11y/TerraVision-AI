@@ -21,7 +21,6 @@ Fixes applied in this version
 from __future__ import annotations
 
 import math
-import os
 import pathlib
 from typing import TypedDict
 
@@ -293,8 +292,9 @@ def get_live_features(lat: float, lon: float, crop: str) -> list[float]:
     """
     if _gee_available():
         try:
-            import ee
             from datetime import date, timedelta
+
+            import ee
 
             end = date.today()
             start = end - timedelta(days=365)
@@ -344,8 +344,9 @@ def get_live_features_v2(lat: float, lon: float, crop: str) -> list[list[float]]
     """
     if _gee_available():
         try:
-            import ee
             from datetime import date
+
+            import ee
             from dateutil.relativedelta import relativedelta
 
             point = ee.Geometry.Point([lon, lat])
@@ -408,8 +409,9 @@ def get_era5_features(lat: float, lon: float) -> dict:
     """
     if _gee_available():
         try:
-            import ee
             from datetime import date, timedelta
+
+            import ee
 
             end = date.today()
             start = end - timedelta(days=30)
@@ -455,8 +457,9 @@ def get_ndvi_tile_url(lat: float, lon: float) -> str | None:
     if not _gee_available():
         return None
     try:
-        import ee
         from datetime import date, timedelta
+
+        import ee
 
         end = date.today()
         start = end - timedelta(days=365)
@@ -685,7 +688,7 @@ def build_report(
         f"  NDVI Index     : {ndvi:.4f}",
         f"  Health Status  : {label}",
         f"  Recommendation : {action}",
-        f"  Analysis Buffer: 500 m radius",
+        "  Analysis Buffer: 500 m radius",
         "",
         sep,
         "  ERA5-LAND CLIMATE (30-day · 11 km)",
