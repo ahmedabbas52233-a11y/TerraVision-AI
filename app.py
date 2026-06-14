@@ -15,6 +15,7 @@ Fixes applied in this version
 [FIX-5] Demo-mode banner distinguishes between "no credentials" and
         "project not registered" so the user sees an actionable message.
 """
+
 from __future__ import annotations
 
 import json
@@ -274,7 +275,8 @@ st.markdown(_THEME_CSS, unsafe_allow_html=True)
 # ─────────────────────────────────────────────────────────────────────────────
 
 # Track GEE status for accurate sidebar badges (FIX-4)
-_GEE_STATUS: str = "offline"   # "live" | "demo" | "offline"
+_GEE_STATUS: str = "offline"  # "live" | "demo" | "offline"
+
 
 def _init_ee() -> None:
     global _GEE_STATUS
@@ -290,6 +292,7 @@ def _init_ee() -> None:
     # ── 2. Streamlit secrets ─────────────────────────────────────────────────
     secret_json: str | None = None
     import contextlib
+
     with contextlib.suppress(Exception):
         secret_json = st.secrets.get("GCP_SERVICE_ACCOUNT_JSON") or st.secrets.get(
             "GCP_SERVICE_ACCOUNT"
@@ -319,7 +322,9 @@ def _init_ee() -> None:
 
     except json.JSONDecodeError:
         _GEE_STATUS = "demo"
-        st.warning("⚠️ `GCP_SERVICE_ACCOUNT_JSON` is not valid JSON — running in Demo Mode.")
+        st.warning(
+            "⚠️ `GCP_SERVICE_ACCOUNT_JSON` is not valid JSON — running in Demo Mode."
+        )
 
     except Exception as exc:
         _GEE_STATUS = "demo"
@@ -346,26 +351,28 @@ _init_ee()
 # 2 · CACHED MODEL LOADER
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @st.cache_resource(show_spinner=False)
 def _cached_model():
     return load_model()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 3 · SESSION STATE DEFAULTS
 # ─────────────────────────────────────────────────────────────────────────────
 
 _DEFAULTS: dict = {
-    "lat":           31.5204,   # FIX-3: lat/lon now live in session_state
-    "lon":           74.3587,
-    "ndvi":          0.5,
-    "yield_base":    0.0,
-    "yield_adj":     0.0,
-    "era5":          {},
-    "features":      [0.5, 291.5, 0.025],
-    "ran":           False,
+    "lat": 31.5204,  # FIX-3: lat/lon now live in session_state
+    "lon": 74.3587,
+    "ndvi": 0.5,
+    "yield_base": 0.0,
+    "yield_adj": 0.0,
+    "era5": {},
+    "features": [0.5, 291.5, 0.025],
+    "ran": False,
     "ndvi_tile_url": None,
     "confidence_pct": CONFIDENCE_FLOOR,
-    "yield_std":     0.0,
+    "yield_std": 0.0,
 }
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
@@ -396,10 +403,16 @@ with st.sidebar:
     # FIX-4: real status badges instead of always-green hardcoded text
     st.markdown("**System Status**")
     _model_obj = _cached_model()
-    _gee_icon  = "🟢" if _GEE_STATUS == "live" else ("🟡" if _GEE_STATUS == "demo" else "🔴")
-    _gee_lbl   = "GEE Live" if _GEE_STATUS == "live" else ("GEE Demo" if _GEE_STATUS == "demo" else "GEE Offline")
-    _mdl_icon  = "🟢" if _model_obj is not None else "🔴"
-    _mdl_lbl   = "Model Ready" if _model_obj is not None else "Model Missing"
+    _gee_icon = (
+        "🟢" if _GEE_STATUS == "live" else ("🟡" if _GEE_STATUS == "demo" else "🔴")
+    )
+    _gee_lbl = (
+        "GEE Live"
+        if _GEE_STATUS == "live"
+        else ("GEE Demo" if _GEE_STATUS == "demo" else "GEE Offline")
+    )
+    _mdl_icon = "🟢" if _model_obj is not None else "🔴"
+    _mdl_lbl = "Model Ready" if _model_obj is not None else "Model Missing"
     st.markdown(f"{_gee_icon} {_gee_lbl} &nbsp;·&nbsp; {_mdl_icon} {_mdl_lbl}")
 
     st.divider()
@@ -448,7 +461,7 @@ with col_left:
     # FIX-3 — explicit key= and on_change clear stale results
     def _on_lat_change() -> None:
         st.session_state["lat"] = st.session_state["_lat_widget"]
-        st.session_state["ran"] = False   # clear stale results
+        st.session_state["ran"] = False  # clear stale results
 
     def _on_lon_change() -> None:
         st.session_state["lon"] = st.session_state["_lon_widget"]
@@ -523,34 +536,34 @@ with col_left:
                 with torch.no_grad():
                     raw: float = model(tensor).item()
 
-                ndvi       = features[0]
+                ndvi = features[0]
                 yield_base = compute_yield(raw, ndvi, crop)
-                yield_adj  = era5_yield_adjustment(
+                yield_adj = era5_yield_adjustment(
                     yield_base, era5["temp_c"], era5["precip_mm_month"], crop
                 )
-                carbon     = yield_adj * CARBON_FRACTION
+                carbon = yield_adj * CARBON_FRACTION
 
                 # Real MC Dropout confidence (not hardcoded)
                 conf_result = mc_dropout_confidence(model, tensor, n_passes=15)
                 confidence_pct = conf_result["confidence_pct"]
-                yield_std      = conf_result["std_yield"]
+                yield_std = conf_result["std_yield"]
 
             st.session_state.update(
                 {
-                    "ndvi":           ndvi,
-                    "yield_base":     yield_base,
-                    "yield_adj":      yield_adj,
-                    "ran":            True,
+                    "ndvi": ndvi,
+                    "yield_base": yield_base,
+                    "yield_adj": yield_adj,
+                    "ran": True,
                     "confidence_pct": confidence_pct,
-                    "yield_std":      yield_std,
-                    "lat":            lat,    # keep in sync
-                    "lon":            lon,
+                    "yield_std": yield_std,
+                    "lat": lat,  # keep in sync
+                    "lon": lon,
                 }
             )
             st.success("✅ Inference complete!")
 
             # ── ERA5 badge ─────────────────────────────────────────────────
-            _src       = era5.get("source", "default")
+            _src = era5.get("source", "default")
             _src_label = "ERA5-Land Live" if _src == "era5-land" else "ERA5 Demo Prior"
             st.markdown(
                 f'<div class="era5-badge">🌡️ {_src_label}</div>',
@@ -582,9 +595,9 @@ with col_left:
             # ── Vegetation health ──────────────────────────────────────────
             label, action, alert_type = ndvi_status(ndvi)
             {
-                "error":   st.error,
+                "error": st.error,
                 "warning": st.warning,
-                "info":    st.info,
+                "info": st.info,
                 "success": st.success,
             }[alert_type](f"**{label}**\n\n{action}")
 
@@ -595,8 +608,17 @@ with col_left:
             # ── Download report ────────────────────────────────────────────
             st.markdown("<br>", unsafe_allow_html=True)
             report_txt = build_report(
-                lat, lon, crop, ndvi, yield_base, yield_adj,
-                carbon, label, action, era5, conf_result,
+                lat,
+                lon,
+                crop,
+                ndvi,
+                yield_base,
+                yield_adj,
+                carbon,
+                label,
+                action,
+                era5,
+                conf_result,
             )
             st.download_button(
                 label="📥 Download Intelligence Report",
@@ -607,12 +629,12 @@ with col_left:
 
     elif st.session_state["ran"]:
         # Show last inference results while user is editing coords
-        _ndvi      = st.session_state["ndvi"]
-        _ybase     = st.session_state["yield_base"]
-        _yadj      = st.session_state["yield_adj"]
-        _era5      = st.session_state["era5"]
-        _carbon    = _yadj * CARBON_FRACTION
-        _src       = _era5.get("source", "demo-prior")
+        _ndvi = st.session_state["ndvi"]
+        _ybase = st.session_state["yield_base"]
+        _yadj = st.session_state["yield_adj"]
+        _era5 = st.session_state["era5"]
+        _carbon = _yadj * CARBON_FRACTION
+        _src = _era5.get("source", "demo-prior")
         _src_label = "ERA5-Land Live" if _src == "era5-land" else "ERA5 Demo Prior"
 
         st.markdown(
@@ -620,8 +642,9 @@ with col_left:
             unsafe_allow_html=True,
         )
         m1, m2 = st.columns(2)
-        m1.metric("ERA5-Adj. Yield", f"{_yadj:.2f} t/ha",
-                  delta=f"{_yadj - _ybase:+.2f} vs base")
+        m1.metric(
+            "ERA5-Adj. Yield", f"{_yadj:.2f} t/ha", delta=f"{_yadj - _ybase:+.2f} vs base"
+        )
         m2.metric("NDVI Index", f"{_ndvi:.4f}")
         m3, m4 = st.columns(2)
         m3.metric("Base Yield", f"{_ybase:.2f} t/ha")
@@ -629,13 +652,15 @@ with col_left:
 
         lbl, act, alrt = ndvi_status(_ndvi)
         {
-            "error":   st.error,
+            "error": st.error,
             "warning": st.warning,
-            "info":    st.info,
+            "info": st.info,
             "success": st.success,
         }[alrt](f"**{lbl}**\n\n{act}")
 
-        st.caption("↑ Results from previous run. Change coordinates above then click **🚀 Run Live Inference** to update.")
+        st.caption(
+            "↑ Results from previous run. Change coordinates above then click **🚀 Run Live Inference** to update."
+        )
 
 # ── RIGHT : SATELLITE MAP + NDVI HEATMAP ─────────────────────────────────────
 with col_right:
@@ -694,7 +719,7 @@ with col_right:
         folium.LayerControl(collapsed=False).add_to(sat_map)
 
     # Analysis marker
-    _ran      = st.session_state["ran"]
+    _ran = st.session_state["ran"]
     _ndvi_now = st.session_state["ndvi"]
     _yield_adj = st.session_state["yield_adj"]
 
@@ -750,11 +775,11 @@ with col_right:
 st.divider()
 st.subheader("📊 Multi-Modal Intelligence Panel")
 
-_ndvi_now  = st.session_state["ndvi"]
+_ndvi_now = st.session_state["ndvi"]
 _yield_base = st.session_state["yield_base"]
-_yield_adj  = st.session_state["yield_adj"]
-_era5       = st.session_state["era5"]
-_ran        = st.session_state["ran"]
+_yield_adj = st.session_state["yield_adj"]
+_era5 = st.session_state["era5"]
+_ran = st.session_state["ran"]
 
 fi1, fi2, fi3, fi4, fi5 = st.columns(5)
 
@@ -782,7 +807,7 @@ with fi3:
     st.markdown("**📈 ERA5 Yield Δ**")
     if _ran:
         delta = _yield_adj - _yield_base
-        sign  = "+" if delta >= 0 else ""
+        sign = "+" if delta >= 0 else ""
         st.caption(f"Base: `{_yield_base:.2f} t/ha`")
         st.caption(f"Adj: `{_yield_adj:.2f} t/ha` ({sign}{delta:.2f})")
     else:
