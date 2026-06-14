@@ -1,0 +1,44 @@
+version: 2
+updates:
+  # Python dependencies (pip)
+  - package-ecosystem: "pip"
+    directory: "/"                    # Where requirements.txt or pyproject.toml lives
+    schedule:
+      interval: "weekly"              # Non-security: weekly batch (easier to manage)
+      day: "monday"                   # Start of week
+    open-pull-requests-limit: 5       # Don't overwhelm you with too many PRs
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "deps"
+      include: "scope"                # e.g., "deps(pip): bump numpy from 1.0 to 2.0"
+    ignore:
+      - dependency-name: "*"          # Optional: ignore major version bumps if you want stability
+        update-types: ["version-update:semver-major"]
+
+  # JavaScript/Node dependencies (npm)
+  - package-ecosystem: "npm"
+    directory: "/"                    # Where package.json lives
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "javascript"
+    commit-message:
+      prefix: "deps"
+      include: "scope"
+
+  # GitHub Actions (workflows)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"             # Actions update less frequently
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
