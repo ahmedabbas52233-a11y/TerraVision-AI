@@ -2,11 +2,18 @@
 TerraVision AI · api.py  (root entry point — uvicorn api:app)
 FastAPI REST wrapper — V2 transformer, live MC Dropout confidence, async GEE.
 
-Author  : Ahmad Abbas Hussain · ahmedabbas52233@gmail.com
-GitHub  : https://github.com/ahmedabbas52233/TerraVision-AI
-Version : 1.0.0
-"""
+Author  : Ahmad Abbas Hussain <ahmedabbas52233@gmail.com>
+GitHub  : https://github.com/ahmedabbas52233-a11y/TerraVision-AI
+Version : 3.0.0
+License : CC BY 4.0
 
+Fixes applied in this version
+──────────────────────────────
+[FIX-4] _init_ee() now logs a targeted error message when the GCP project is
+        not registered for Earth Engine, rather than a generic exception dump.
+[FIX-5] Auth order corrected: service account JSON is tried before ADC so
+        that cloud deployments (Railway, Docker) always use the env var.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -49,46 +56,83 @@ from terravision.core import (
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+    format="%(asctime)s %(levelname)-8s %(name)s %(message)s",
     datefmt="%Y-%m-%dT%H:%M:%SZ",
 )
 log = logging.getLogger("terravision.api")
 
-
 # ── Earth Engine init ─────────────────────────────────────────────────────────
+
 def _init_ee() -> bool:
+    """
+    Initialise GEE for the API context.
+    Priority order (FIX-5):
+      1. GCP_SERVICE_ACCOUNT_JSON env var  (cloud deployments)
+      2. Application Default Credentials   (local dev)
+    Logs a targeted message when the project is not registered (FIX-4).
+    """
     import ee
 
-    try:
-        sa = os.getenv("GCP_SERVICE_ACCOUNT_JSON")
-        if sa:
+    # ── 1. Service account env var ────────────────────────────────────────────
+    sa = os.getenv("GCP_SERVICE_ACCOUNT_JSON")
+    if sa:
+        try:
             info = json.loads(sa)
             creds = ee.ServiceAccountCredentials(info["client_email"], key_data=sa)
             ee.Initialize(creds)
-        else:
-            ee.Initialize()
-        log.info("GEE initialised.")
+            log.info("GEE initialised via service account: %s", info.get("client_email"))
+            return True
+        except json.JSONDecodeError:
+            log.error(
+                "GCP_SERVICE_ACCOUNT_JSON is not valid JSON — "
+                "copy the full key file content without any line breaks."
+            )
+            return False
+        except Exception as exc:
+            err = str(exc)
+            if "not registered" in err or "Earth Engine" in err:
+                log.error(
+                    "GEE project not registered for Earth Engine. "
+                    "Visit https://console.cloud.google.com/earth-engine/configuration "
+                    "and register the project, then re-deploy. Details: %s", exc
+                )
+            else:
+                log.warning("GEE service-account init failed (demo mode): %s", exc)
+            return False
+
+    # ── 2. Application Default Credentials (local dev fallback) ───────────────
+    try:
+        ee.Initialize()
+        log.info("GEE initialised via Application Default Credentials.")
         return True
     except Exception as exc:
-        log.warning("GEE init failed (demo mode): %s", exc)
+        log.warning("GEE ADC init failed (demo mode): %s", exc)
         return False
 
 
 _GEE_READY: bool = _init_ee()
-_MODEL = load_model()
+_MODEL             = load_model()
 _MODEL_READY: bool = _MODEL is not None
-_IS_V2: bool = _MODEL is not None and is_v2(_MODEL)
+_IS_V2: bool       = _MODEL is not None and is_v2(_MODEL)
 
 if _MODEL_READY:
-    _n = sum(p.numel() for p in _MODEL.parameters())  # type: ignore[union-attr]
+    _n = sum(p.numel() for p in _MODEL.parameters())   # type: ignore[union-attr]
     log.info("Model loaded — %s  %d params", type(_MODEL).__name__, _n)
+else:
+    log.error(
+        "No model checkpoint found in models/. "
+        "Run `python train.py` to generate terravision_v1.pth, "
+        "then restart the API server."
+    )
 
 # ── Rate limiter ──────────────────────────────────────────────────────────────
+
 limiter = Limiter(key_func=get_remote_address)
 
 # ── Config ────────────────────────────────────────────────────────────────────
-_API_KEY: str = os.getenv("TERRAVISION_API_KEY", "dev-insecure-key")
-_ENV: str = os.getenv("TERRAVISION_ENV", "development")
+
+_API_KEY: str      = os.getenv("TERRAVISION_API_KEY", "dev-insecure-key")
+_ENV: str          = os.getenv("TERRAVISION_ENV", "development")
 _CORS_ORIGINS: list[str] = (
     ["*"]
     if _ENV == "development"
@@ -96,23 +140,27 @@ _CORS_ORIGINS: list[str] = (
 )
 
 # ── API key dependency ────────────────────────────────────────────────────────
+
 _hdr = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
 async def require_api_key(k: str | None = Security(_hdr)) -> str:
     if not k or k != _API_KEY:
         raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED, detail="Invalid or missing X-API-Key header."
+            status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing X-API-Key header.",
         )
     return k
 
 
-# ── Noop coroutine (replaces deprecated asyncio.coroutine) ───────────────────
+# ── Noop coroutine ────────────────────────────────────────────────────────────
+
 async def _noop_str() -> str | None:
     return None
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
+
 app = FastAPI(
     title="TerraVision AI API",
     description=(
@@ -126,7 +174,7 @@ app = FastAPI(
     contact={
         "name": "Ahmad Abbas Hussain",
         "email": "ahmedabbas52233@gmail.com",
-        "url": "https://github.com/ahmedabbas52233/TerraVision-AI",
+        "url": "https://github.com/ahmedabbas52233-a11y/TerraVision-AI",
     },
     license_info={
         "name": "CC BY 4.0",
@@ -150,18 +198,20 @@ app.add_middleware(
 )
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
+
 CropType = Literal["Wheat", "Rice", "Maize", "Soybean"]
 
 
 class PredictRequest(BaseModel):
-    lat: float = Field(..., ge=-90.0, le=90.0)
-    lon: float = Field(..., ge=-180.0, le=180.0)
-    crop: CropType = Field("Wheat")
+    lat: float          = Field(..., ge=-90.0, le=90.0)
+    lon: float          = Field(..., ge=-180.0, le=180.0)
+    crop: CropType      = Field("Wheat")
     include_ndvi_tile: bool = Field(False)
-    include_report: bool = Field(False)
-    mc_passes: int = Field(
+    include_report: bool    = Field(False)
+    mc_passes: int      = Field(
         20, ge=5, le=100, description="MC Dropout passes for confidence (5-100)"
     )
+
     model_config = {
         "json_schema_extra": {
             "examples": [
@@ -197,7 +247,7 @@ class PredictResponse(BaseModel):
     yield_base_t_ha: float
     yield_adj_t_ha: float
     yield_delta_t_ha: float
-    # Uncertainty — real MC Dropout, not hardcoded
+    # Uncertainty — real MC Dropout
     confidence_pct: float
     yield_std_t_ha: float
     ci_95_lower: float
@@ -208,6 +258,7 @@ class PredictResponse(BaseModel):
     # Meta
     model_name: str
     model_version: str
+    gee_mode: str       # "live" | "demo"
     inference_ms: float
     generated_utc: str
     report: str | None = None
@@ -231,17 +282,18 @@ class CropInfo(BaseModel):
 
 
 # ── Router ────────────────────────────────────────────────────────────────────
+
 v1 = APIRouter(prefix="/v1")
 
 
 @v1.get("/", tags=["Meta"])
 async def root() -> dict[str, str]:
     return {
-        "name": "TerraVision AI API",
+        "name":    "TerraVision AI API",
         "version": MODEL_VERSION,
-        "docs": "/v1/docs",
-        "health": "/v1/health",
-        "github": "https://github.com/ahmedabbas52233/TerraVision-AI",
+        "docs":    "/v1/docs",
+        "health":  "/v1/health",
+        "github":  "https://github.com/ahmedabbas52233-a11y/TerraVision-AI",
     }
 
 
@@ -288,12 +340,17 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
     if not _MODEL_READY or _MODEL is None:
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Model not loaded. Run: python train.py",
+            detail=(
+                "Model not loaded. "
+                "Commit models/terravision_v1.pth and redeploy, "
+                "or run `python train.py` and restart."
+            ),
         )
 
     t0 = time.perf_counter()
     log.info(
-        "Inference lat=%.4f lon=%.4f crop=%s v2=%s", req.lat, req.lon, req.crop, _IS_V2
+        "Inference lat=%.4f lon=%.4f crop=%s v2=%s gee=%s",
+        req.lat, req.lon, req.crop, _IS_V2, _GEE_READY,
     )
 
     # ── Parallel GEE calls ────────────────────────────────────────────────────
@@ -312,58 +369,45 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
         ),
     )
 
-    # ── Inference + MC Dropout confidence (Gap 1 fix) ─────────────────────────
+    # ── Inference + MC Dropout confidence ─────────────────────────────────────
     def _infer() -> tuple[float, float, float, ConfidenceResult]:
         if _IS_V2:
-            # V2: features is list[list[float]] → (1, seq_len, 3)
             tensor = torch.tensor([features], dtype=torch.float32)
         else:
-            # V1: features is list[float] → (1, 3)
             tensor = torch.tensor([features], dtype=torch.float32)
 
         with torch.no_grad():
-            raw: float = _MODEL(tensor).item()  # type: ignore[union-attr]
+            raw: float = _MODEL(tensor).item()   # type: ignore[union-attr]
 
-        # Extract NDVI — cast resolves union type for Pylance
         if _IS_V2:
             ndvi_val = float(cast(list[list[float]], features)[0][0])
         else:
             ndvi_val = float(cast(list[float], features)[0])
+
         ybase = compute_yield(raw, ndvi_val, req.crop)
-        yadj = era5_yield_adjustment(
+        yadj  = era5_yield_adjustment(
             ybase, era5["temp_c"], era5["precip_mm_month"], req.crop
         )
-        # Real MC Dropout confidence — not hardcoded
         conf = mc_dropout_confidence(_MODEL, tensor, n_passes=req.mc_passes)  # type: ignore
         return ndvi_val, ybase, yadj, conf
 
     ndvi, yield_base, yield_adj, conf = await asyncio.to_thread(_infer)
-    carbon = yield_adj * CARBON_FRACTION
-    lbl, act, alrt = ndvi_status(ndvi)
-    ms = (time.perf_counter() - t0) * 1_000
+
+    carbon           = yield_adj * CARBON_FRACTION
+    lbl, act, alrt   = ndvi_status(ndvi)
+    ms               = (time.perf_counter() - t0) * 1_000
+    gee_mode         = "live" if _GEE_READY else "demo"
 
     log.info(
-        "Done — NDVI=%.4f yield=%.2f conf=%.1f%% in %.0f ms",
-        ndvi,
-        yield_adj,
-        conf["confidence_pct"],
-        ms,
+        "Done — NDVI=%.4f yield=%.2f conf=%.1f%% mode=%s in %.0f ms",
+        ndvi, yield_adj, conf["confidence_pct"], gee_mode, ms,
     )
 
     report_txt: str | None = None
     if req.include_report:
         report_txt = build_report(
-            req.lat,
-            req.lon,
-            req.crop,
-            ndvi,
-            yield_base,
-            yield_adj,
-            carbon,
-            lbl,
-            act,
-            era5,
-            conf,
+            req.lat, req.lon, req.crop, ndvi, yield_base, yield_adj,
+            carbon, lbl, act, era5, conf,
         )
 
     return PredictResponse(
@@ -387,8 +431,9 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
         ci_95_upper=conf["ci_95_upper"],
         carbon_mg_c_ha=round(carbon, 3),
         carbon_fraction=CARBON_FRACTION,
-        model_name=type(_MODEL).__name__,  # type: ignore[union-attr]
+        model_name=type(_MODEL).__name__,   # type: ignore[union-attr]
         model_version=MODEL_VERSION,
+        gee_mode=gee_mode,
         inference_ms=round(ms, 1),
         generated_utc=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),
         report=report_txt,

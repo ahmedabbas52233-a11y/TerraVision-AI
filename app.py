@@ -1,20 +1,20 @@
 """
-TerraVision AI — Satellite-Native Crop Intelligence at Planetary Scale
-Author  : Ahmad Abbas Hussain  ()
+TerraVision AI — app.py  (Streamlit entry point)
+Author  : Ahmad Abbas Hussain <ahmedabbas52233@gmail.com>
 Version : 3.0.0
 License : CC BY 4.0
-DOI     : https://github.com/ahmedabbas52233/TerraVision-AI
 
-v3.0.0 Enhancements
-───────────────────
-  [1] ERA5-Land weather features  — temperature_2m + precipitation_sum
-      pulled from GEE, gaussian thermal-stress + precipitation-adequacy
-      correction applied on top of the transformer base yield.
-  [2] FastAPI REST wrapper        — see api.py  (/predict, /health)
-  [3] NDVI heatmap TileLayer      — 12-month Sentinel-2 NDVI composite
-      rendered as a coloured Folium TileLayer with a legend.
+Fixes applied in this version
+──────────────────────────────
+[FIX-3] st.number_input() widgets now carry explicit key= parameters and are
+        backed by session_state so lat/lon values persist across reruns.
+        on_change callback resets `ran = False` when coordinates change,
+        clearing stale results and prompting the user to re-run.
+[FIX-4] Sidebar "System Status" now reflects actual GEE / model state
+        instead of always showing three green badges.
+[FIX-5] Demo-mode banner distinguishes between "no credentials" and
+        "project not registered" so the user sees an actionable message.
 """
-
 from __future__ import annotations
 
 import json
@@ -44,8 +44,9 @@ from terravision.core import (
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PAGE CONFIG  ·  must be the very first Streamlit call
+# PAGE CONFIG · must be the very first Streamlit call
 # ─────────────────────────────────────────────────────────────────────────────
+
 st.set_page_config(
     page_title="TerraVision AI",
     layout="wide",
@@ -56,37 +57,36 @@ st.set_page_config(
 # ─────────────────────────────────────────────────────────────────────────────
 # 3-D SPACE THEME
 # ─────────────────────────────────────────────────────────────────────────────
+
 _THEME_CSS = """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
 
 :root {
-  --bg:      #030810;
+  --bg: #030810;
   --surface: rgba(8,20,42,0.82);
-  --border:  rgba(0,255,170,0.14);
-  --accent:  #00ffaa;
+  --border: rgba(0,255,170,0.14);
+  --accent: #00ffaa;
   --accent2: #00c8ff;
-  --text:    #d8eeff;
-  --muted:   #5a7a96;
-  --card-r:  18px;
-  --glow-g:  0 0 30px rgba(0,255,170,0.20);
-  --glow-b:  0 0 30px rgba(0,200,255,0.20);
+  --text: #d8eeff;
+  --muted: #5a7a96;
+  --card-r: 18px;
+  --glow-g: 0 0 30px rgba(0,255,170,0.20);
+  --glow-b: 0 0 30px rgba(0,200,255,0.20);
 }
-
 html, body, [data-testid="stAppViewContainer"] {
   background: var(--bg) !important;
   color: var(--text) !important;
   font-family: 'DM Sans', sans-serif !important;
 }
-
 [data-testid="stAppViewContainer"]::before {
   content: '';
   position: fixed;
   inset: 0;
   background-image:
-    radial-gradient(1px 1px at  8% 12%, rgba(255,255,255,.55) 0%, transparent 100%),
+    radial-gradient(1px 1px at 8% 12%, rgba(255,255,255,.55) 0%, transparent 100%),
     radial-gradient(1px 1px at 22% 44%, rgba(255,255,255,.35) 0%, transparent 100%),
-    radial-gradient(1.5px 1.5px at 38%  8%, rgba(255,255,255,.50) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 38% 8%, rgba(255,255,255,.50) 0%, transparent 100%),
     radial-gradient(1px 1px at 55% 72%, rgba(255,255,255,.30) 0%, transparent 100%),
     radial-gradient(1px 1px at 68% 28%, rgba(255,255,255,.45) 0%, transparent 100%),
     radial-gradient(1px 1px at 79% 58%, rgba(255,255,255,.35) 0%, transparent 100%),
@@ -100,7 +100,6 @@ html, body, [data-testid="stAppViewContainer"] {
   animation: star-twinkle 7s ease-in-out infinite alternate;
 }
 @keyframes star-twinkle { 0%{opacity:.5} 100%{opacity:1} }
-
 [data-testid="stAppViewContainer"]::after {
   content: '';
   position: fixed;
@@ -111,7 +110,6 @@ html, body, [data-testid="stAppViewContainer"] {
   pointer-events: none;
   z-index: 0;
 }
-
 h1 {
   font-family: 'Orbitron', monospace !important;
   font-weight: 900 !important;
@@ -126,21 +124,18 @@ h1 {
   margin-bottom: .2rem !important;
 }
 @keyframes shimmer { 0%{background-position:0%} 100%{background-position:200%} }
-
 h2, h3, h4 {
   font-family: 'Orbitron', monospace !important;
   font-weight: 700 !important;
   color: var(--accent) !important;
   letter-spacing: 1.5px !important;
 }
-
 [data-testid="stSidebar"] {
   background: linear-gradient(180deg, rgba(3,8,20,.98) 0%, rgba(5,14,32,.98) 100%) !important;
   border-right: 1px solid var(--border) !important;
   box-shadow: 4px 0 30px rgba(0,255,170,.06) !important;
 }
 [data-testid="stSidebar"] *, [data-testid="stSidebar"] p { color: var(--text) !important; }
-
 [data-testid="column"] { perspective: 1200px; }
 [data-testid="column"] > div {
   background: var(--surface);
@@ -156,7 +151,6 @@ h2, h3, h4 {
   transform: perspective(1000px) translateY(-5px) rotateX(1.5deg);
   box-shadow: 0 18px 52px rgba(0,255,170,.18), var(--glow-g);
 }
-
 .stButton > button {
   background: linear-gradient(135deg, #00ffaa 0%, #00c8ff 100%) !important;
   color: #020c18 !important;
@@ -176,7 +170,6 @@ h2, h3, h4 {
   transform: scale(1.05) translateY(-3px) !important;
   box-shadow: 0 0 42px rgba(0,255,170,.72) !important;
 }
-
 .stNumberInput input, [data-baseweb="input"] input {
   background: rgba(0,255,170,.04) !important;
   border: 1px solid var(--border) !important;
@@ -188,14 +181,12 @@ h2, h3, h4 {
   box-shadow: 0 0 0 2px rgba(0,255,170,.18) !important;
   outline: none !important;
 }
-
 [data-baseweb="select"] > div {
   background: rgba(0,255,170,.04) !important;
   border: 1px solid var(--border) !important;
   border-radius: 10px !important;
   color: var(--text) !important;
 }
-
 [data-testid="metric-container"] {
   background: linear-gradient(135deg,rgba(0,255,170,.08) 0%,rgba(0,200,255,.06) 100%) !important;
   border: 1px solid rgba(0,255,170,.22) !important;
@@ -216,14 +207,12 @@ h2, h3, h4 {
   font-size: 1.45rem !important;
   font-weight: 700 !important;
 }
-
 .stAlert {
   border-radius: 12px !important;
   background: rgba(5,16,35,.75) !important;
   backdrop-filter: blur(10px) !important;
   border-left-width: 3px !important;
 }
-
 .stDownloadButton > button {
   background: transparent !important;
   border: 1px solid var(--accent) !important;
@@ -242,8 +231,6 @@ h2, h3, h4 {
   box-shadow: var(--glow-g) !important;
   transform: translateY(-2px) !important;
 }
-
-/* ERA5 badge */
 .era5-badge {
   display: inline-block;
   background: rgba(0,200,255,.12);
@@ -257,8 +244,6 @@ h2, h3, h4 {
   font-family: 'Orbitron', monospace;
   margin-bottom: .6rem;
 }
-
-/* NDVI legend */
 .ndvi-legend {
   display: flex;
   gap: 0;
@@ -269,65 +254,59 @@ h2, h3, h4 {
   border: 1px solid var(--border);
 }
 .ndvi-legend div { flex: 1; }
-
 iframe {
   border-radius: 14px !important;
   border: 1px solid var(--border) !important;
   box-shadow: var(--glow-b) !important;
 }
-
-hr                   { border-color: var(--border) !important; }
-.stSpinner > div     { border-top-color: var(--accent) !important; }
-.stCaption, small    { color: var(--muted) !important; }
-::-webkit-scrollbar  { width: 4px; }
+hr { border-color: var(--border) !important; }
+.stSpinner > div { border-top-color: var(--accent) !important; }
+.stCaption, small { color: var(--muted) !important; }
+::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: #020a16; }
 ::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 4px; }
 </style>
 """
 st.markdown(_THEME_CSS, unsafe_allow_html=True)
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # 1 · EARTH ENGINE INITIALISATION
 # ─────────────────────────────────────────────────────────────────────────────
-def _init_ee() -> None:
-    """
-    Initialise GEE in three-tier priority order:
-      1. Application Default Credentials (local: gcloud auth application-default login)
-      2. Streamlit secrets   → GCP_SERVICE_ACCOUNT key
-      3. Environment variable → GCP_SERVICE_ACCOUNT_JSON
 
-    If none of the above are available the app enters DEMO MODE: all GEE calls
-    return fallback priors and a warning banner is displayed.  The app never
-    crashes due to missing credentials — important for local development.
-    """
-    # ── 1. Application Default Credentials ──────────────────────────────────
+# Track GEE status for accurate sidebar badges (FIX-4)
+_GEE_STATUS: str = "offline"   # "live" | "demo" | "offline"
+
+def _init_ee() -> None:
+    global _GEE_STATUS
+
+    # ── 1. Application Default Credentials (local dev) ───────────────────────
     try:
         ee.Initialize()
+        _GEE_STATUS = "live"
         return
     except Exception:
         pass
 
-    # ── 2. Streamlit secrets (wrapped — throws if secrets.toml is absent) ───
+    # ── 2. Streamlit secrets ─────────────────────────────────────────────────
     secret_json: str | None = None
     import contextlib
-
     with contextlib.suppress(Exception):
         secret_json = st.secrets.get("GCP_SERVICE_ACCOUNT_JSON") or st.secrets.get(
             "GCP_SERVICE_ACCOUNT"
         )
 
-    # ── 3. Environment variable (Docker / Railway / local .env) ─────────────
+    # ── 3. Environment variable (Docker / Railway) ───────────────────────────
     if not secret_json:
         secret_json = os.getenv("GCP_SERVICE_ACCOUNT_JSON")
 
-    # ── 4. No credentials found → DEMO MODE (no crash) ──────────────────────
+    # ── 4. No credentials → Demo Mode ───────────────────────────────────────
     if not secret_json:
+        _GEE_STATUS = "demo"
         st.info(
-            "ℹ️ **Demo Mode** — GEE not authenticated.  "
-            "Predictions use crop-specific priors instead of live satellite data.  \n\n"
-            "To enable live Sentinel-2 + ERA5 data, create "
-            "`.streamlit/secrets.toml` from `.streamlit/secrets.toml.example`."
+            "ℹ️ **Demo Mode** — GEE credentials not found.  \n"
+            "Predictions use location-aware crop priors instead of live Sentinel-2 data.  \n\n"
+            "To enable live data, add your service account JSON to "
+            "`.streamlit/secrets.toml` as `GCP_SERVICE_ACCOUNT_JSON`."
         )
         return
 
@@ -336,43 +315,66 @@ def _init_ee() -> None:
         info = json.loads(secret_json)
         creds = ee.ServiceAccountCredentials(info["client_email"], key_data=secret_json)
         ee.Initialize(creds)
+        _GEE_STATUS = "live"
+
     except json.JSONDecodeError:
-        st.warning("⚠️ GCP_SERVICE_ACCOUNT is not valid JSON — running in Demo Mode.")
+        _GEE_STATUS = "demo"
+        st.warning("⚠️ `GCP_SERVICE_ACCOUNT_JSON` is not valid JSON — running in Demo Mode.")
+
     except Exception as exc:
-        st.warning(f"⚠️ GEE authentication failed (Demo Mode active): {exc}")
+        _GEE_STATUS = "demo"
+        err = str(exc)
+        # FIX-5: distinguish "not registered" from other auth errors
+        if "not registered" in err or "Earth Engine" in err:
+            st.warning(
+                "⚠️ **GEE Project Not Registered** — Demo Mode active.  \n\n"
+                "Your GCP project has not been enabled for Earth Engine.  \n"
+                "**Fix:** visit "
+                "[console.cloud.google.com/earth-engine/configuration]"
+                "(https://console.cloud.google.com/earth-engine/configuration) "
+                "and click **Register** → choose *Noncommercial / Research*.  \n\n"
+                "After registration, also ensure your service account is listed "
+                "at [code.earthengine.google.com](https://code.earthengine.google.com)."
+            )
+        else:
+            st.warning(f"⚠️ GEE authentication failed (Demo Mode active): {exc}")
 
 
 _init_ee()
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # 2 · CACHED MODEL LOADER
 # ─────────────────────────────────────────────────────────────────────────────
+
 @st.cache_resource(show_spinner=False)
 def _cached_model():
     return load_model()
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # 3 · SESSION STATE DEFAULTS
 # ─────────────────────────────────────────────────────────────────────────────
-_DEFAULTS = {
-    "ndvi": 0.5,
-    "yield_base": 0.0,
-    "yield_adj": 0.0,
-    "era5": {},
-    "features": [0.5, 291.5, 0.025],
-    "ran": False,
+
+_DEFAULTS: dict = {
+    "lat":           31.5204,   # FIX-3: lat/lon now live in session_state
+    "lon":           74.3587,
+    "ndvi":          0.5,
+    "yield_base":    0.0,
+    "yield_adj":     0.0,
+    "era5":          {},
+    "features":      [0.5, 291.5, 0.025],
+    "ran":           False,
     "ndvi_tile_url": None,
+    "confidence_pct": CONFIDENCE_FLOOR,
+    "yield_std":     0.0,
 }
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # 4 · SIDEBAR
 # ─────────────────────────────────────────────────────────────────────────────
+
 with st.sidebar:
     st.markdown(
         """
@@ -390,8 +392,16 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     st.divider()
+
+    # FIX-4: real status badges instead of always-green hardcoded text
     st.markdown("**System Status**")
-    st.markdown("🟢 GEE Online &nbsp;·&nbsp; 🟢 Model Ready &nbsp;·&nbsp; 🟢 ERA5 Live")
+    _model_obj = _cached_model()
+    _gee_icon  = "🟢" if _GEE_STATUS == "live" else ("🟡" if _GEE_STATUS == "demo" else "🔴")
+    _gee_lbl   = "GEE Live" if _GEE_STATUS == "live" else ("GEE Demo" if _GEE_STATUS == "demo" else "GEE Offline")
+    _mdl_icon  = "🟢" if _model_obj is not None else "🔴"
+    _mdl_lbl   = "Model Ready" if _model_obj is not None else "Model Missing"
+    st.markdown(f"{_gee_icon} {_gee_lbl} &nbsp;·&nbsp; {_mdl_icon} {_mdl_lbl}")
+
     st.divider()
     st.markdown("**v3.0.0 Features**")
     st.caption("🌡️ ERA5-Land weather correction")
@@ -409,10 +419,10 @@ with st.sidebar:
     st.divider()
     st.caption("Developed by **Ahmad Abbas Hussain**\n")
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # 5 · HERO HEADER
 # ─────────────────────────────────────────────────────────────────────────────
+
 st.markdown(
     """
     <h1>🛰️ TERRAVISION AI</h1>
@@ -425,32 +435,46 @@ st.markdown(
 )
 st.divider()
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # 6 · MAIN LAYOUT
 # ─────────────────────────────────────────────────────────────────────────────
+
 col_left, col_right = st.columns([1, 1.55], gap="large")
 
-# ── LEFT : INPUT + RESULTS ────────────────────────────────────────────────────
+# ── LEFT : INPUT + RESULTS ───────────────────────────────────────────────────
 with col_left:
     st.subheader("📍 Field Parameters")
 
+    # FIX-3 — explicit key= and on_change clear stale results
+    def _on_lat_change() -> None:
+        st.session_state["lat"] = st.session_state["_lat_widget"]
+        st.session_state["ran"] = False   # clear stale results
+
+    def _on_lon_change() -> None:
+        st.session_state["lon"] = st.session_state["_lon_widget"]
+        st.session_state["ran"] = False
+
     lat = st.number_input(
         "Latitude",
-        value=31.5204,
+        value=st.session_state["lat"],
         min_value=-90.0,
         max_value=90.0,
         format="%.4f",
+        key="_lat_widget",
+        on_change=_on_lat_change,
         help="Decimal degrees. Negative = Southern Hemisphere.",
     )
     lon = st.number_input(
         "Longitude",
-        value=74.3587,
+        value=st.session_state["lon"],
         min_value=-180.0,
         max_value=180.0,
         format="%.4f",
+        key="_lon_widget",
+        on_change=_on_lon_change,
         help="Decimal degrees. Negative = Western Hemisphere.",
     )
+
     crop = st.selectbox(
         "Crop Type",
         list(CROP_PARAMS.keys()),
@@ -469,20 +493,23 @@ with col_left:
     if run_clicked:
         model = _cached_model()
         if model is None:
-            st.error("⛔ Model checkpoint not found in `models/`. Cannot run inference.")
+            st.error(
+                "⛔ Model checkpoint not found in `models/`.  \n"
+                "Run `python train.py` locally to generate `terravision_v1.pth`, "
+                "then commit the file and redeploy."
+            )
         else:
-
-            # ── Step 1 : Sentinel-2 NDVI ─────────────────────────────────────
+            # ── Step 1 : Sentinel-2 NDVI ──────────────────────────────────
             with st.spinner("🛰️ Querying Sentinel-2 NDVI via GEE …"):
                 features = get_live_features(lat, lon, crop)
                 st.session_state["features"] = features
 
-            # ── Step 2 : ERA5-Land climate features  [Enhancement 1] ─────────
+            # ── Step 2 : ERA5-Land climate features ───────────────────────
             with st.spinner("🌡️ Pulling ERA5-Land weather data …"):
                 era5 = get_era5_features(lat, lon)
                 st.session_state["era5"] = era5
 
-            # ── Step 3 : NDVI heatmap tile URL  [Enhancement 3] ──────────────
+            # ── Step 3 : NDVI heatmap tile URL ────────────────────────────
             if show_heatmap:
                 with st.spinner("🗺️ Generating NDVI heatmap tiles …"):
                     ndvi_tile_url = get_ndvi_tile_url(lat, lon)
@@ -490,48 +517,47 @@ with col_left:
             else:
                 st.session_state["ndvi_tile_url"] = None
 
-            # ── Step 4 : Transformer inference ───────────────────────────────
+            # ── Step 4 : Transformer inference ────────────────────────────
             with st.spinner("⚡ Running ST-Transformer …"):
                 tensor = torch.tensor([features], dtype=torch.float32)
                 with torch.no_grad():
                     raw: float = model(tensor).item()
 
-                ndvi = features[0]
+                ndvi       = features[0]
                 yield_base = compute_yield(raw, ndvi, crop)
-                yield_adj = era5_yield_adjustment(
+                yield_adj  = era5_yield_adjustment(
                     yield_base, era5["temp_c"], era5["precip_mm_month"], crop
                 )
-                carbon = yield_adj * CARBON_FRACTION
+                carbon     = yield_adj * CARBON_FRACTION
 
                 # Real MC Dropout confidence (not hardcoded)
-                conf_tensor = torch.tensor([features], dtype=torch.float32)
-                if hasattr(model, "SEQ_LEN"):
-                    conf_tensor = torch.tensor([features], dtype=torch.float32)
-                conf_result = mc_dropout_confidence(model, conf_tensor, n_passes=15)
+                conf_result = mc_dropout_confidence(model, tensor, n_passes=15)
                 confidence_pct = conf_result["confidence_pct"]
-                yield_std = conf_result["std_yield"]
+                yield_std      = conf_result["std_yield"]
 
-                st.session_state.update(
-                    {
-                        "ndvi": ndvi,
-                        "yield_base": yield_base,
-                        "yield_adj": yield_adj,
-                        "ran": True,
-                        "confidence_pct": confidence_pct,
-                        "yield_std": yield_std,
-                    }
-                )
-
+            st.session_state.update(
+                {
+                    "ndvi":           ndvi,
+                    "yield_base":     yield_base,
+                    "yield_adj":      yield_adj,
+                    "ran":            True,
+                    "confidence_pct": confidence_pct,
+                    "yield_std":      yield_std,
+                    "lat":            lat,    # keep in sync
+                    "lon":            lon,
+                }
+            )
             st.success("✅ Inference complete!")
 
-            # ── ERA5 badge ────────────────────────────────────────────────────
-            _src = era5.get("source", "default")
-            _src_label = "ERA5-Land Live" if _src == "era5-land" else "ERA5 Default Prior"
+            # ── ERA5 badge ─────────────────────────────────────────────────
+            _src       = era5.get("source", "default")
+            _src_label = "ERA5-Land Live" if _src == "era5-land" else "ERA5 Demo Prior"
             st.markdown(
-                f'<div class="era5-badge">🌡️ {_src_label}</div>', unsafe_allow_html=True
+                f'<div class="era5-badge">🌡️ {_src_label}</div>',
+                unsafe_allow_html=True,
             )
 
-            # ── Primary metrics ───────────────────────────────────────────────
+            # ── Primary metrics ────────────────────────────────────────────
             m1, m2 = st.columns(2)
             m1.metric(
                 "ERA5-Adj. Yield",
@@ -546,42 +572,31 @@ with col_left:
 
             st.divider()
 
-            # ── ERA5 climate panel ────────────────────────────────────────────
+            # ── ERA5 climate panel ─────────────────────────────────────────
             if _src == "era5-land":
                 with st.expander("🌡️ ERA5 Climate Detail", expanded=True):
                     e1, e2 = st.columns(2)
                     e1.metric("Air Temp (2m)", f"{era5['temp_c']:.1f} °C")
                     e2.metric("Monthly Precip", f"{era5['precip_mm_month']:.1f} mm")
 
-            # ── Vegetation health ─────────────────────────────────────────────
+            # ── Vegetation health ──────────────────────────────────────────
             label, action, alert_type = ndvi_status(ndvi)
             {
-                "error": st.error,
+                "error":   st.error,
                 "warning": st.warning,
-                "info": st.info,
+                "info":    st.info,
                 "success": st.success,
             }[alert_type](f"**{label}**\n\n{action}")
 
             m5, m6 = st.columns(2)
-            m5.metric(
-                "Confidence",
-                f"{st.session_state.get('confidence_pct', CONFIDENCE_FLOOR):.1f} %",
-            )
+            m5.metric("Confidence", f"{confidence_pct:.1f} %")
             m6.metric("Version", f"v{MODEL_VERSION}")
 
-            # ── Download report ───────────────────────────────────────────────
+            # ── Download report ────────────────────────────────────────────
             st.markdown("<br>", unsafe_allow_html=True)
             report_txt = build_report(
-                lat,
-                lon,
-                crop,
-                ndvi,
-                yield_base,
-                yield_adj,
-                carbon,
-                label,
-                action,
-                era5,
+                lat, lon, crop, ndvi, yield_base, yield_adj,
+                carbon, label, action, era5, conf_result,
             )
             st.download_button(
                 label="📥 Download Intelligence Report",
@@ -590,12 +605,43 @@ with col_left:
                 mime="text/plain",
             )
 
+    elif st.session_state["ran"]:
+        # Show last inference results while user is editing coords
+        _ndvi      = st.session_state["ndvi"]
+        _ybase     = st.session_state["yield_base"]
+        _yadj      = st.session_state["yield_adj"]
+        _era5      = st.session_state["era5"]
+        _carbon    = _yadj * CARBON_FRACTION
+        _src       = _era5.get("source", "demo-prior")
+        _src_label = "ERA5-Land Live" if _src == "era5-land" else "ERA5 Demo Prior"
+
+        st.markdown(
+            f'<div class="era5-badge">🌡️ {_src_label} — previous run</div>',
+            unsafe_allow_html=True,
+        )
+        m1, m2 = st.columns(2)
+        m1.metric("ERA5-Adj. Yield", f"{_yadj:.2f} t/ha",
+                  delta=f"{_yadj - _ybase:+.2f} vs base")
+        m2.metric("NDVI Index", f"{_ndvi:.4f}")
+        m3, m4 = st.columns(2)
+        m3.metric("Base Yield", f"{_ybase:.2f} t/ha")
+        m4.metric("Carbon Est.", f"{_carbon:.2f} Mg C/ha")
+
+        lbl, act, alrt = ndvi_status(_ndvi)
+        {
+            "error":   st.error,
+            "warning": st.warning,
+            "info":    st.info,
+            "success": st.success,
+        }[alrt](f"**{lbl}**\n\n{act}")
+
+        st.caption("↑ Results from previous run. Change coordinates above then click **🚀 Run Live Inference** to update.")
 
 # ── RIGHT : SATELLITE MAP + NDVI HEATMAP ─────────────────────────────────────
 with col_right:
     st.subheader("🗺️ Satellite Intelligence View")
 
-    # NDVI legend (always visible) ────────────────────────────────────────────
+    # NDVI legend (always visible when heatmap is toggled on)
     if show_heatmap:
         st.markdown(
             """
@@ -623,15 +669,18 @@ with col_right:
             unsafe_allow_html=True,
         )
 
-    # Build Folium map ─────────────────────────────────────────────────────────
+    # Build Folium map — use session_state lat/lon so map stays in sync
+    _map_lat = st.session_state["lat"]
+    _map_lon = st.session_state["lon"]
+
     sat_map = folium.Map(
-        location=[lat, lon],
+        location=[_map_lat, _map_lon],
         zoom_start=13,
         tiles="https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}",
         attr="© Google Maps",
     )
 
-    # NDVI heatmap TileLayer  [Enhancement 3] ─────────────────────────────────
+    # NDVI heatmap TileLayer
     ndvi_tile_url = st.session_state.get("ndvi_tile_url")
     if show_heatmap and ndvi_tile_url:
         folium.TileLayer(
@@ -644,14 +693,14 @@ with col_right:
         ).add_to(sat_map)
         folium.LayerControl(collapsed=False).add_to(sat_map)
 
-    # Analysis marker ──────────────────────────────────────────────────────────
-    _ran = st.session_state["ran"]
+    # Analysis marker
+    _ran      = st.session_state["ran"]
     _ndvi_now = st.session_state["ndvi"]
     _yield_adj = st.session_state["yield_adj"]
 
     popup_html = (
         f"<b>TerraVision Analysis Target</b><br>"
-        f"Lat: {lat:.4f}° &nbsp; Lon: {lon:.4f}°<br>"
+        f"Lat: {_map_lat:.4f}° &nbsp; Lon: {_map_lon:.4f}°<br>"
         f"Crop: {crop}"
     )
     if _ran:
@@ -661,15 +710,15 @@ with col_right:
         )
 
     folium.Marker(
-        location=[lat, lon],
+        location=[_map_lat, _map_lon],
         popup=folium.Popup(popup_html, max_width=240),
         tooltip="Analysis Target",
         icon=folium.Icon(color="darkgreen", icon="leaf", prefix="fa"),
     ).add_to(sat_map)
 
-    # 500 m analysis buffer ────────────────────────────────────────────────────
+    # 500 m analysis buffer
     folium.Circle(
-        location=[lat, lon],
+        location=[_map_lat, _map_lon],
         radius=500,
         color="#00ffaa",
         weight=1.5,
@@ -679,9 +728,9 @@ with col_right:
         tooltip="500 m analysis buffer (GEE · Sentinel-2)",
     ).add_to(sat_map)
 
-    # 10 km ERA5 buffer ────────────────────────────────────────────────────────
+    # 10 km ERA5 buffer
     folium.Circle(
-        location=[lat, lon],
+        location=[_map_lat, _map_lon],
         radius=10_000,
         color="#00c8ff",
         weight=1.0,
@@ -694,18 +743,18 @@ with col_right:
 
     folium_static(sat_map, width=None, height=490)
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # 7 · MULTI-MODAL INTELLIGENCE PANEL
 # ─────────────────────────────────────────────────────────────────────────────
+
 st.divider()
 st.subheader("📊 Multi-Modal Intelligence Panel")
 
-_ndvi_now = st.session_state["ndvi"]
+_ndvi_now  = st.session_state["ndvi"]
 _yield_base = st.session_state["yield_base"]
-_yield_adj = st.session_state["yield_adj"]
-_era5 = st.session_state["era5"]
-_ran = st.session_state["ran"]
+_yield_adj  = st.session_state["yield_adj"]
+_era5       = st.session_state["era5"]
+_ran        = st.session_state["ran"]
 
 fi1, fi2, fi3, fi4, fi5 = st.columns(5)
 
@@ -714,7 +763,7 @@ with fi1:
     if _ran:
         _lbl, _, _ = ndvi_status(_ndvi_now)
         st.caption(f"NDVI `{_ndvi_now:.4f}`")
-        st.caption(_lbl.split("—")[-1].strip())
+        st.caption(_lbl.split("—")[-1].strip() if "—" in _lbl else _lbl)
     else:
         st.caption("Run inference →")
 
@@ -724,7 +773,8 @@ with fi2:
         st.caption(f"Temp: `{_era5['temp_c']:.1f} °C`")
         st.caption(f"Precip: `{_era5['precip_mm_month']:.0f} mm/mo`")
     elif _ran:
-        st.caption("Default priors used")
+        st.caption(f"Temp: `{_era5.get('temp_c', 'N/A')} °C` (prior)")
+        st.caption(f"Precip: `{_era5.get('precip_mm_month', 'N/A')} mm/mo` (prior)")
     else:
         st.caption("Run inference →")
 
@@ -732,9 +782,9 @@ with fi3:
     st.markdown("**📈 ERA5 Yield Δ**")
     if _ran:
         delta = _yield_adj - _yield_base
-        sign = "+" if delta >= 0 else ""
-        st.caption(f"Base:  `{_yield_base:.2f} t/ha`")
-        st.caption(f"Adj:   `{_yield_adj:.2f} t/ha`  ({sign}{delta:.2f})")
+        sign  = "+" if delta >= 0 else ""
+        st.caption(f"Base: `{_yield_base:.2f} t/ha`")
+        st.caption(f"Adj: `{_yield_adj:.2f} t/ha` ({sign}{delta:.2f})")
     else:
         st.caption("Run inference →")
 
@@ -751,10 +801,10 @@ with fi5:
     st.caption("S-2 SR · 10 m · 500 m buf")
     st.caption("ERA5-Land · 11 km · 10 km buf")
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # 8 · FOOTER
 # ─────────────────────────────────────────────────────────────────────────────
+
 st.divider()
 st.markdown(
     f"""
