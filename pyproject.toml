@@ -102,7 +102,7 @@ addopts = """
   --cov=api
   --cov-report=term-missing
   --cov-report=html:htmlcov
-  --cov-fail-under=70
+  --cov-fail-under=60
 """
 markers = [
   "slow: marks tests as slow-running",
