@@ -1,7 +1,7 @@
 """
 TerraVision AI — app.py  (Streamlit entry point)
 Author  : Ahmad Abbas Hussain <ahmedabbas52233@gmail.com>
-Version : 3.0.1
+Version : 3.0.2
 License : CC BY 4.0
 
 Fixes applied in this version
@@ -16,6 +16,7 @@ Fixes applied in this version
         "project not registered" so the user sees an actionable message.
 [FIX-6] GEE initialization now correctly handles Streamlit secrets with
         explicit project ID and precise error messages.
+[FIX-7] Robust secret parsing — handles both TOML dict sections and JSON strings.
 """
 
 from __future__ import annotations
@@ -273,10 +274,46 @@ hr { border-color: var(--border) !important; }
 st.markdown(_THEME_CSS, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 1 · EARTH ENGINE INITIALISATION  (FIX-6)
+# 1 · EARTH ENGINE INITIALISATION  (FIX-6 + FIX-7)
 # ─────────────────────────────────────────────────────────────────────────────
 
 _GEE_STATUS: str = "offline"  # "live" | "demo" | "offline"
+
+
+def _get_secret_json() -> str | None:
+    """Extract service-account JSON from Streamlit secrets or env var.
+
+    Handles three common formats:
+    1. Single TOML string:  GCP_SERVICE_ACCOUNT_JSON = \'\'\'{...}\'\'\'
+    2. TOML dict section:   [GCP_SERVICE_ACCOUNT_JSON] type = "service_account" ...
+    3. Environment variable: GCP_SERVICE_ACCOUNT_JSON (raw JSON string)
+    """
+    import contextlib
+
+    raw = None
+
+    # 1. Try Streamlit secrets
+    with contextlib.suppress(Exception):
+        raw = st.secrets.get("GCP_SERVICE_ACCOUNT_JSON") or st.secrets.get(
+            "GCP_SERVICE_ACCOUNT"
+        )
+
+    # 2. Fallback to environment variable
+    if not raw:
+        raw = os.getenv("GCP_SERVICE_ACCOUNT_JSON")
+
+    if not raw:
+        return None
+
+    # If it is already a dict (TOML section), convert to JSON string
+    if isinstance(raw, dict):
+        return json.dumps(raw)
+
+    # If it is a string, return as-is
+    if isinstance(raw, str):
+        return raw
+
+    return None
 
 
 def _init_ee() -> None:
@@ -290,31 +327,21 @@ def _init_ee() -> None:
     except Exception:
         pass
 
-    # ── 2. Streamlit secrets ─────────────────────────────────────────────────
-    secret_json: str | None = None
-    import contextlib
+    # ── 2. Fetch secret ──────────────────────────────────────────────────────
+    secret_json = _get_secret_json()
 
-    with contextlib.suppress(Exception):
-        secret_json = st.secrets.get("GCP_SERVICE_ACCOUNT_JSON") or st.secrets.get(
-            "GCP_SERVICE_ACCOUNT"
-        )
-
-    # ── 3. Environment variable (Docker / Railway) ───────────────────────────
-    if not secret_json:
-        secret_json = os.getenv("GCP_SERVICE_ACCOUNT_JSON")
-
-    # ── 4. No credentials → Demo Mode ───────────────────────────────────────
+    # ── 3. No credentials → Demo Mode ───────────────────────────────────────
     if not secret_json:
         _GEE_STATUS = "demo"
         st.info(
             "ℹ️ **Demo Mode** — GEE credentials not found.  \n"
             "Predictions use location-aware crop priors instead of live Sentinel-2 data.  \n\n"
             "To enable live data, add your service account JSON to "
-            "`.streamlit/secrets.toml` as `GCP_SERVICE_ACCOUNT_JSON`."
+            "Streamlit Secrets as `GCP_SERVICE_ACCOUNT_JSON`."
         )
         return
 
-    # ── 5. Authenticate with service account ────────────────────────────────
+    # ── 4. Authenticate with service account ────────────────────────────────
     try:
         info = json.loads(secret_json)
         creds = ee.ServiceAccountCredentials(
@@ -324,16 +351,18 @@ def _init_ee() -> None:
         ee.Initialize(creds, project="terravision-ai-498310")
         _GEE_STATUS = "live"
 
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as exc:
         _GEE_STATUS = "demo"
         st.warning(
-            "⚠️ `GCP_SERVICE_ACCOUNT_JSON` is not valid JSON — running in Demo Mode."
+            "⚠️ `GCP_SERVICE_ACCOUNT_JSON` is not valid JSON — running in Demo Mode.  \n\n"
+            f"JSON decode error: `{exc}`  \n"
+            "**Fix:** Ensure the secret is a single JSON string (not a TOML section)."
         )
 
     except Exception as exc:
         _GEE_STATUS = "demo"
         err = str(exc).lower()
-        # FIX-6: precise error matching instead of broad "Earth Engine" catch
+
         if "not registered" in err:
             st.warning(
                 "⚠️ **GEE Project Not Registered** — Demo Mode active.  \n\n"
