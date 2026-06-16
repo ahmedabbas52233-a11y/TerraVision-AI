@@ -17,6 +17,7 @@ Fixes applied in this version
 [FIX-4] _init_ee_from_json() raises a descriptive error when the GCP project
         is not registered, so the caller can show a targeted warning.
 """
+
 from __future__ import annotations
 
 import math
@@ -32,42 +33,42 @@ import torch.nn as nn
 # ─────────────────────────────────────────────────────────────────────────────
 
 MODEL_VERSION: str = "3.0.0"
-CARBON_FRACTION: float = 0.47   # IPCC 2006 Vol.4 AFOLU carbon fraction
+CARBON_FRACTION: float = 0.47  # IPCC 2006 Vol.4 AFOLU carbon fraction
 CONFIDENCE_FLOOR: float = 85.0  # minimum reported confidence (%)
 
 # Crop bio-physical parameters used for yield scaling and demo priors
 CROP_PARAMS: dict[str, dict] = {
     "Wheat": {
-        "ndvi_prior":  0.38,
-        "temp_K":      285.0,
-        "moisture":    0.025,
-        "ndvi_scale":  9.5,    # raw → t/ha multiplier
-        "opt_temp_c":  18.0,   # optimal growing temperature (°C)
-        "opt_precip":  55.0,   # optimal monthly precipitation (mm)
+        "ndvi_prior": 0.38,
+        "temp_K": 285.0,
+        "moisture": 0.025,
+        "ndvi_scale": 9.5,  # raw → t/ha multiplier
+        "opt_temp_c": 18.0,  # optimal growing temperature (°C)
+        "opt_precip": 55.0,  # optimal monthly precipitation (mm)
     },
     "Rice": {
-        "ndvi_prior":  0.45,
-        "temp_K":      299.0,
-        "moisture":    0.040,
-        "ndvi_scale":  11.0,
-        "opt_temp_c":  27.0,
-        "opt_precip":  90.0,
+        "ndvi_prior": 0.45,
+        "temp_K": 299.0,
+        "moisture": 0.040,
+        "ndvi_scale": 11.0,
+        "opt_temp_c": 27.0,
+        "opt_precip": 90.0,
     },
     "Maize": {
-        "ndvi_prior":  0.52,
-        "temp_K":      293.0,
-        "moisture":    0.030,
-        "ndvi_scale":  14.5,
-        "opt_temp_c":  24.0,
-        "opt_precip":  70.0,
+        "ndvi_prior": 0.52,
+        "temp_K": 293.0,
+        "moisture": 0.030,
+        "ndvi_scale": 14.5,
+        "opt_temp_c": 24.0,
+        "opt_precip": 70.0,
     },
     "Soybean": {
-        "ndvi_prior":  0.42,
-        "temp_K":      291.0,
-        "moisture":    0.028,
-        "ndvi_scale":  7.5,
-        "opt_temp_c":  22.0,
-        "opt_precip":  65.0,
+        "ndvi_prior": 0.42,
+        "temp_K": 291.0,
+        "moisture": 0.028,
+        "ndvi_scale": 7.5,
+        "opt_temp_c": 22.0,
+        "opt_precip": 65.0,
     },
 }
 
@@ -79,6 +80,7 @@ _CKPT_V1 = _ROOT / "models" / "terravision_v1.pth"
 # ─────────────────────────────────────────────────────────────────────────────
 # TYPE ALIASES
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class ConfidenceResult(TypedDict):
     confidence_pct: float
@@ -92,6 +94,7 @@ class ConfidenceResult(TypedDict):
 # MODEL DEFINITIONS
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class TerraVisionTransformer(nn.Module):
     """
     V1 — Single-timestep Spatio-Temporal Transformer.
@@ -99,12 +102,13 @@ class TerraVisionTransformer(nn.Module):
     Output: (batch, 1)  →  raw predicted yield (t/ha, unscaled)
     Parameters: 25,089  (~98 KB checkpoint)
     """
+
     SEQ_LEN: int = 1  # sentinel used by is_v2()
 
     def __init__(self, input_dim: int = 3, model_dim: int = 64) -> None:
         super().__init__()
         self.input_proj = nn.Linear(input_dim, model_dim)
-        self.attention  = nn.MultiheadAttention(model_dim, num_heads=4, batch_first=True)
+        self.attention = nn.MultiheadAttention(model_dim, num_heads=4, batch_first=True)
         self.ffn = nn.Sequential(
             nn.Linear(model_dim, 128),
             nn.GELU(),
@@ -122,9 +126,9 @@ class TerraVisionTransformer(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (batch, 3) → unsqueeze to (batch, 1, 3) for attention
-        x = self.input_proj(x.unsqueeze(1))          # (B, 1, 64)
-        x, _ = self.attention(x, x, x)               # (B, 1, 64)
-        return self.ffn(x.squeeze(1))                 # (B, 1)
+        x = self.input_proj(x.unsqueeze(1))  # (B, 1, 64)
+        x, _ = self.attention(x, x, x)  # (B, 1, 64)
+        return self.ffn(x.squeeze(1))  # (B, 1)
 
 
 class TerraVisionTransformerV2(nn.Module):
@@ -133,13 +137,14 @@ class TerraVisionTransformerV2(nn.Module):
     Input : (batch, seq_len=6, 3)  →  [NDVI, temperature_K, soil_moisture] × 6 months
     Output: (batch, 1)             →  raw predicted yield (t/ha, unscaled)
     """
+
     SEQ_LEN: int = 6
 
     def __init__(self, input_dim: int = 3, model_dim: int = 64, seq_len: int = 6) -> None:
         super().__init__()
-        self.seq_len    = seq_len
+        self.seq_len = seq_len
         self.input_proj = nn.Linear(input_dim, model_dim)
-        self.attention  = nn.MultiheadAttention(model_dim, num_heads=4, batch_first=True)
+        self.attention = nn.MultiheadAttention(model_dim, num_heads=4, batch_first=True)
         self.ffn = nn.Sequential(
             nn.Linear(model_dim, 128),
             nn.GELU(),
@@ -157,15 +162,16 @@ class TerraVisionTransformerV2(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (batch, seq_len, 3)
-        x = self.input_proj(x)                        # (B, S, 64)
-        x, _ = self.attention(x, x, x)               # (B, S, 64)
-        x = x.mean(dim=1)                             # temporal pooling → (B, 64)
-        return self.ffn(x)                            # (B, 1)
+        x = self.input_proj(x)  # (B, S, 64)
+        x, _ = self.attention(x, x, x)  # (B, S, 64)
+        x = x.mean(dim=1)  # temporal pooling → (B, 64)
+        return self.ffn(x)  # (B, 1)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MODEL LOADING
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def is_v2(model: nn.Module) -> bool:
     """Return True if the loaded model is TerraVisionTransformerV2."""
@@ -178,7 +184,10 @@ def load_model() -> nn.Module | None:
     Returns None (no crash) if neither checkpoint exists — callers
     must guard with `if model is None`.
     """
-    for ckpt, cls in ((_CKPT_V2, TerraVisionTransformerV2), (_CKPT_V1, TerraVisionTransformer)):
+    for ckpt, cls in (
+        (_CKPT_V2, TerraVisionTransformerV2),
+        (_CKPT_V1, TerraVisionTransformer),
+    ):
         if ckpt.exists():
             try:
                 model = cls()
@@ -199,11 +208,13 @@ def load_model() -> nn.Module | None:
 # GEE HELPER  (internal — not called by app.py/api.py directly)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def _gee_available() -> bool:
     """Return True only if GEE has already been initialised by the caller."""
     try:
         import ee
-        ee.Number(1).getInfo()   # lightweight probe
+
+        ee.Number(1).getInfo()  # lightweight probe
         return True
     except Exception:
         return False
@@ -212,6 +223,7 @@ def _gee_available() -> bool:
 # ─────────────────────────────────────────────────────────────────────────────
 # DEMO FALLBACK  — FIX-1 & FIX-2
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _demo_ndvi(lat: float, lon: float, crop: str) -> float:
     """
@@ -226,7 +238,7 @@ def _demo_ndvi(lat: float, lon: float, crop: str) -> float:
     # Longitudinal variation (continental interiors vs coastal)
     lon_mod = 0.06 * math.sin(math.radians(lon * 0.9))
     # Seasonal signal (June = northern hemisphere summer peak)
-    season  = 0.05 * math.sin(math.radians(lat * 3.0))
+    season = 0.05 * math.sin(math.radians(lat * 3.0))
     return float(np.clip(base + lat_mod + lon_mod + season, 0.02, 0.88))
 
 
@@ -245,7 +257,7 @@ def _demo_soil(lat: float, lon: float) -> float:
     """Soil moisture prior: tropical wetter, arid zones drier."""
     base = 0.025
     tropical = 0.015 * math.cos(math.radians(lat * 2.0))
-    lon_var   = 0.005 * math.sin(math.radians(lon))
+    lon_var = 0.005 * math.sin(math.radians(lon))
     return float(np.clip(base + tropical + lon_var, 0.005, 0.080))
 
 
@@ -254,23 +266,24 @@ def _demo_era5(lat: float, lon: float) -> dict:
     ERA5-Land fallback with realistic geographic variation (FIX-2).
     Returns the same dict shape as the live GEE call.
     """
-    temp_k    = _demo_temp_k(lat)
-    temp_c    = temp_k - 273.15
+    temp_k = _demo_temp_k(lat)
+    temp_c = temp_k - 273.15
     # Monthly precipitation: tropical/coastal wetter, polar/continental drier
-    base_p    = 55.0
-    trop_p    = 40.0 * math.cos(math.radians(lat * 1.6))
-    lon_p     = 10.0 * math.sin(math.radians(lon * 0.5))
-    precip    = float(np.clip(base_p + trop_p + lon_p, 5.0, 180.0))
+    base_p = 55.0
+    trop_p = 40.0 * math.cos(math.radians(lat * 1.6))
+    lon_p = 10.0 * math.sin(math.radians(lon * 0.5))
+    precip = float(np.clip(base_p + trop_p + lon_p, 5.0, 180.0))
     return {
-        "temp_c":          round(temp_c, 1),
+        "temp_c": round(temp_c, 1),
         "precip_mm_month": round(precip, 1),
-        "source":          "demo-prior",
+        "source": "demo-prior",
     }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PUBLIC FEATURE EXTRACTORS
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def get_live_features(lat: float, lon: float, crop: str) -> list[float]:
     """
@@ -282,10 +295,11 @@ def get_live_features(lat: float, lon: float, crop: str) -> list[float]:
             from datetime import date, timedelta
 
             import ee
-            end   = date.today()
+
+            end = date.today()
             start = end - timedelta(days=365)
             point = ee.Geometry.Point([lon, lat])
-            buf   = point.buffer(500)
+            buf = point.buffer(500)
 
             s2 = (
                 ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
@@ -296,15 +310,19 @@ def get_live_features(lat: float, lon: float, crop: str) -> list[float]:
                 .median()
             )
             ndvi_img = s2.normalizedDifference(["B8", "B4"])
-            ndvi_val = ndvi_img.reduceRegion(
-                reducer=ee.Reducer.mean(), geometry=buf, scale=10, maxPixels=1e6
-            ).get("nd").getInfo()
+            ndvi_val = (
+                ndvi_img.reduceRegion(
+                    reducer=ee.Reducer.mean(), geometry=buf, scale=10, maxPixels=1e6
+                )
+                .get("nd")
+                .getInfo()
+            )
 
             if ndvi_val is None:
                 raise ValueError("NDVI returned None — cloud cover or no imagery")
 
-            ndvi     = float(np.clip(ndvi_val, 0.0, 1.0))
-            temp_k   = float(CROP_PARAMS[crop]["temp_K"])
+            ndvi = float(np.clip(ndvi_val, 0.0, 1.0))
+            temp_k = float(CROP_PARAMS[crop]["temp_K"])
             moisture = float(CROP_PARAMS[crop]["moisture"])
             return [ndvi, temp_k, moisture]
 
@@ -312,8 +330,8 @@ def get_live_features(lat: float, lon: float, crop: str) -> list[float]:
             print(f"[TerraVision] GEE V1 fallback: {exc}")
 
     # ── Demo fallback — location-aware (FIX-1) ──────────────────────────────
-    ndvi     = _demo_ndvi(lat, lon, crop)
-    temp_k   = _demo_temp_k(lat)
+    ndvi = _demo_ndvi(lat, lon, crop)
+    temp_k = _demo_temp_k(lat)
     moisture = _demo_soil(lat, lon)
     return [ndvi, temp_k, moisture]
 
@@ -332,13 +350,13 @@ def get_live_features_v2(lat: float, lon: float, crop: str) -> list[list[float]]
             from dateutil.relativedelta import relativedelta
 
             point = ee.Geometry.Point([lon, lat])
-            buf   = point.buffer(500)
+            buf = point.buffer(500)
             seq: list[list[float]] = []
 
             today = date.today()
-            for m in range(5, -1, -1):   # 6 months: oldest first
+            for m in range(5, -1, -1):  # 6 months: oldest first
                 mn_start = today - relativedelta(months=m + 1)
-                mn_end   = today - relativedelta(months=m)
+                mn_end = today - relativedelta(months=m)
                 s2 = (
                     ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
                     .filterBounds(buf)
@@ -348,12 +366,16 @@ def get_live_features_v2(lat: float, lon: float, crop: str) -> list[list[float]]
                     .median()
                 )
                 ndvi_img = s2.normalizedDifference(["B8", "B4"])
-                ndvi_val = ndvi_img.reduceRegion(
-                    reducer=ee.Reducer.mean(), geometry=buf, scale=10, maxPixels=1e6
-                ).get("nd").getInfo()
+                ndvi_val = (
+                    ndvi_img.reduceRegion(
+                        reducer=ee.Reducer.mean(), geometry=buf, scale=10, maxPixels=1e6
+                    )
+                    .get("nd")
+                    .getInfo()
+                )
 
-                ndvi     = float(np.clip(ndvi_val or 0.0, 0.0, 1.0))
-                temp_k   = float(CROP_PARAMS[crop]["temp_K"])
+                ndvi = float(np.clip(ndvi_val or 0.0, 0.0, 1.0))
+                temp_k = float(CROP_PARAMS[crop]["temp_K"])
                 moisture = float(CROP_PARAMS[crop]["moisture"])
                 seq.append([ndvi, temp_k, moisture])
 
@@ -366,15 +388,15 @@ def get_live_features_v2(lat: float, lon: float, crop: str) -> list[list[float]]
 
     # ── Demo fallback — 6-month synthetic sequence ───────────────────────────
     base_ndvi = _demo_ndvi(lat, lon, crop)
-    base_tk   = _demo_temp_k(lat)
+    base_tk = _demo_temp_k(lat)
     base_soil = _demo_soil(lat, lon)
     seq = []
     for month_offset in range(6):
         # Add realistic month-to-month variation
-        phase  = math.sin(math.radians(month_offset * 60))
-        ndvi   = float(np.clip(base_ndvi + 0.04 * phase, 0.02, 0.88))
+        phase = math.sin(math.radians(month_offset * 60))
+        ndvi = float(np.clip(base_ndvi + 0.04 * phase, 0.02, 0.88))
         temp_k = float(base_tk + 2.0 * phase)
-        soil   = float(np.clip(base_soil + 0.003 * phase, 0.005, 0.080))
+        soil = float(np.clip(base_soil + 0.003 * phase, 0.005, 0.080))
         seq.append([ndvi, temp_k, soil])
     return seq
 
@@ -390,10 +412,11 @@ def get_era5_features(lat: float, lon: float) -> dict:
             from datetime import date, timedelta
 
             import ee
-            end   = date.today()
+
+            end = date.today()
             start = end - timedelta(days=30)
             point = ee.Geometry.Point([lon, lat])
-            buf   = point.buffer(10_000)  # 10 km ERA5 sampling buffer
+            buf = point.buffer(10_000)  # 10 km ERA5 sampling buffer
 
             era5 = (
                 ee.ImageCollection("ECMWF/ERA5_LAND/DAILY_AGGR")
@@ -406,18 +429,18 @@ def get_era5_features(lat: float, lon: float) -> dict:
                 reducer=ee.Reducer.mean(), geometry=buf, scale=11_132, maxPixels=1e6
             ).getInfo()
 
-            temp_k  = stats.get("temperature_2m")
-            precip  = stats.get("total_precipitation_sum")
+            temp_k = stats.get("temperature_2m")
+            precip = stats.get("total_precipitation_sum")
 
             if temp_k is None or precip is None:
                 raise ValueError("ERA5 returned None values")
 
-            temp_c        = float(temp_k) - 273.15
-            precip_mm_mo  = float(precip) * 1000 * 30  # m/day → mm/month
+            temp_c = float(temp_k) - 273.15
+            precip_mm_mo = float(precip) * 1000 * 30  # m/day → mm/month
             return {
-                "temp_c":          round(temp_c, 1),
+                "temp_c": round(temp_c, 1),
                 "precip_mm_month": round(precip_mm_mo, 1),
-                "source":          "era5-land",
+                "source": "era5-land",
             }
 
         except Exception as exc:
@@ -437,10 +460,11 @@ def get_ndvi_tile_url(lat: float, lon: float) -> str | None:
         from datetime import date, timedelta
 
         import ee
-        end   = date.today()
+
+        end = date.today()
         start = end - timedelta(days=365)
         point = ee.Geometry.Point([lon, lat])
-        buf   = point.buffer(50_000)
+        buf = point.buffer(50_000)
 
         s2 = (
             ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
@@ -453,9 +477,17 @@ def get_ndvi_tile_url(lat: float, lon: float) -> str | None:
         ndvi_img = s2.normalizedDifference(["B8", "B4"]).rename("NDVI")
 
         vis_params = {
-            "min":     -0.1,
-            "max":      0.8,
-            "palette": ["8B4513", "D2691E", "F4D03F", "A9D18E", "4CAF50", "1B7A3E", "005A1F"],
+            "min": -0.1,
+            "max": 0.8,
+            "palette": [
+                "8B4513",
+                "D2691E",
+                "F4D03F",
+                "A9D18E",
+                "4CAF50",
+                "1B7A3E",
+                "005A1F",
+            ],
         }
         map_id = ndvi_img.getMapId(vis_params)
         return map_id["tile_fetcher"].url_format
@@ -469,33 +501,34 @@ def get_ndvi_tile_url(lat: float, lon: float) -> str | None:
 # YIELD COMPUTATION
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def compute_yield(raw: float, ndvi: float, crop: str) -> float:
     """
     Scale raw transformer output to agronomically plausible t/ha.
     Applies NDVI-based penalties for bare soil / sparse vegetation.
     """
     params = CROP_PARAMS[crop]
-    scale  = params["ndvi_scale"]
-    base   = abs(raw) * scale
+    scale = params["ndvi_scale"]
+    base = abs(raw) * scale
 
     # NDVI-based modifiers
     if ndvi < 0.05:
         # Bare soil / water — severe penalty
         modifier = 0.15
     elif ndvi < 0.10:
-        modifier = 0.15 + (ndvi - 0.05) / 0.05 * 0.25   # 0.15 → 0.40
+        modifier = 0.15 + (ndvi - 0.05) / 0.05 * 0.25  # 0.15 → 0.40
     elif ndvi < 0.20:
         # Critical — low vegetation
-        modifier = 0.40 + (ndvi - 0.10) / 0.10 * 0.35   # 0.40 → 0.75
+        modifier = 0.40 + (ndvi - 0.10) / 0.10 * 0.35  # 0.40 → 0.75
     elif ndvi < 0.30:
         # Stressed
-        modifier = 0.75 + (ndvi - 0.20) / 0.10 * 0.15   # 0.75 → 0.90
+        modifier = 0.75 + (ndvi - 0.20) / 0.10 * 0.15  # 0.75 → 0.90
     elif ndvi < 0.60:
         # Normal growth
-        modifier = 0.90 + (ndvi - 0.30) / 0.30 * 0.10   # 0.90 → 1.00
+        modifier = 0.90 + (ndvi - 0.30) / 0.30 * 0.10  # 0.90 → 1.00
     else:
         # Optimal / high photosynthetic activity
-        modifier = 1.00 + (ndvi - 0.60) / 0.40 * 0.15   # 1.00 → 1.15 max
+        modifier = 1.00 + (ndvi - 0.60) / 0.40 * 0.15  # 1.00 → 1.15 max
 
     return float(max(0.0, base * modifier))
 
@@ -510,19 +543,19 @@ def era5_yield_adjustment(
     Apply ERA5-Land biophysical correction to the transformer base yield.
     Uses Gaussian thermal-stress and precipitation-adequacy functions.
     """
-    params   = CROP_PARAMS[crop]
-    opt_t    = params["opt_temp_c"]
-    opt_p    = params["opt_precip"]
+    params = CROP_PARAMS[crop]
+    opt_t = params["opt_temp_c"]
+    opt_p = params["opt_precip"]
 
     # Gaussian thermal stress (σ = 8°C → gentle curve)
-    thermal  = math.exp(-0.5 * ((temp_c - opt_t) / 8.0) ** 2)
+    thermal = math.exp(-0.5 * ((temp_c - opt_t) / 8.0) ** 2)
 
     # Precipitation adequacy: penalty for drought (<50%) and waterlogging (>200%)
-    p_ratio  = precip_mm_month / opt_p
+    p_ratio = precip_mm_month / opt_p
     if p_ratio < 0.5:
-        precip_factor = 0.70 + p_ratio * 0.60    # drought: 0.70 → 1.00
+        precip_factor = 0.70 + p_ratio * 0.60  # drought: 0.70 → 1.00
     elif p_ratio <= 2.0:
-        precip_factor = 1.00                      # adequate
+        precip_factor = 1.00  # adequate
     else:
         precip_factor = 1.00 - min(0.20, (p_ratio - 2.0) * 0.10)  # waterlogging
 
@@ -533,6 +566,7 @@ def era5_yield_adjustment(
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIDENCE (MC DROPOUT)
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def mc_dropout_confidence(
     model: nn.Module,
@@ -553,14 +587,14 @@ def mc_dropout_confidence(
             yields.append(float(out.item()))
     model.eval()
 
-    arr    = np.array(yields, dtype=np.float64)
+    arr = np.array(yields, dtype=np.float64)
     mean_y = float(arr.mean())
-    std_y  = float(arr.std())
+    std_y = float(arr.std())
 
     # Coefficient of variation → confidence (lower std = higher confidence)
-    cv     = std_y / (abs(mean_y) + 1e-6)
+    cv = std_y / (abs(mean_y) + 1e-6)
     raw_conf = max(0.0, 1.0 - cv) * 100.0
-    conf   = float(np.clip(raw_conf, CONFIDENCE_FLOOR, 99.9))
+    conf = float(np.clip(raw_conf, CONFIDENCE_FLOOR, 99.9))
 
     return ConfidenceResult(
         confidence_pct=round(conf, 1),
@@ -574,6 +608,7 @@ def mc_dropout_confidence(
 # ─────────────────────────────────────────────────────────────────────────────
 # NDVI HEALTH CLASSIFICATION
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def ndvi_status(ndvi: float) -> tuple[str, str, str]:
     """
@@ -612,6 +647,7 @@ def ndvi_status(ndvi: float) -> tuple[str, str, str]:
 # REPORT BUILDER
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def build_report(
     lat: float,
     lon: float,
@@ -629,9 +665,10 @@ def build_report(
     Generate a structured plain-text intelligence report for download.
     """
     from datetime import datetime
-    ts   = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
-    sep  = "─" * 72
-    conf_pct  = conf["confidence_pct"] if conf else CONFIDENCE_FLOOR
+
+    ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    sep = "─" * 72
+    conf_pct = conf["confidence_pct"] if conf else CONFIDENCE_FLOOR
     yield_std = conf["std_yield"] if conf else 0.0
 
     lines = [

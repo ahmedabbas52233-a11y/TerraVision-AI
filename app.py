@@ -42,7 +42,8 @@ st.set_page_config(
 # CSS THEME
 # ─────────────────────────────────────────────────────────────────────────────
 
-st.markdown("""
+st.markdown(
+    """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=DM+Sans:wght@300;400;500;600&display=swap');
 :root {
@@ -103,13 +104,16 @@ hr{border-color:var(--border)!important}
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-thumb{background:var(--accent);border-radius:4px}
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # GEE INIT
 # ─────────────────────────────────────────────────────────────────────────────
 
 _GEE_STATUS = "demo"
+
 
 def _init_ee() -> None:
     global _GEE_STATUS
@@ -123,9 +127,8 @@ def _init_ee() -> None:
     # 2. Streamlit secrets
     secret_json = None
     with contextlib.suppress(Exception):
-        secret_json = (
-            st.secrets.get("GCP_SERVICE_ACCOUNT_JSON")
-            or st.secrets.get("GCP_SERVICE_ACCOUNT")
+        secret_json = st.secrets.get("GCP_SERVICE_ACCOUNT_JSON") or st.secrets.get(
+            "GCP_SERVICE_ACCOUNT"
         )
     # 3. Environment variable (Railway / Docker)
     if not secret_json:
@@ -158,6 +161,7 @@ _init_ee()
 # CACHED MODEL  (None is fine — synthetic fallback handles it)
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 @st.cache_resource(show_spinner=False)
 def _cached_model():
     return load_model()
@@ -169,11 +173,11 @@ def _synthetic_forward(features: list[float], crop: str) -> float:
     Mirrors what the transformer would output given the same input features.
     """
     ndvi, temp_k, soil = features[0], features[1], features[2]
-    params   = CROP_PARAMS[crop]
+    params = CROP_PARAMS[crop]
     ndvi_rat = ndvi / max(params["ndvi_prior"], 0.01)
     t_stress = math.exp(-0.5 * ((temp_k - params["temp_K"]) / 10.0) ** 2)
-    s_ratio  = soil / max(params["moisture"], 0.001)
-    raw      = 0.52 * ndvi_rat * t_stress * (0.85 + 0.15 * s_ratio)
+    s_ratio = soil / max(params["moisture"], 0.001)
+    raw = 0.52 * ndvi_rat * t_stress * (0.85 + 0.15 * s_ratio)
     return float(max(0.0, raw))
 
 
@@ -182,11 +186,12 @@ def _synthetic_confidence(yield_val: float) -> dict:
     noise = 0.012 * yield_val
     return {
         "confidence_pct": CONFIDENCE_FLOOR,
-        "std_yield":      round(noise, 4),
-        "ci_95_lower":    round(yield_val - 1.96 * noise, 4),
-        "ci_95_upper":    round(yield_val + 1.96 * noise, 4),
-        "n_passes":       0,
+        "std_yield": round(noise, 4),
+        "ci_95_lower": round(yield_val - 1.96 * noise, 4),
+        "ci_95_upper": round(yield_val + 1.96 * noise, 4),
+        "n_passes": 0,
     }
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SESSION STATE  — initialise once
@@ -194,20 +199,20 @@ def _synthetic_confidence(yield_val: float) -> dict:
 
 # [FIX-A] lat/lon live here; number_input widgets bind to these keys directly.
 _DEFAULTS = {
-    "lat":            31.5204,
-    "lon":            74.3587,
-    "ndvi":           0.5,
-    "yield_base":     0.0,
-    "yield_adj":      0.0,
-    "carbon":         0.0,
-    "era5":           {},
-    "features":       [0.5, 291.5, 0.025],
-    "ran":            False,
-    "ndvi_tile_url":  None,
+    "lat": 31.5204,
+    "lon": 74.3587,
+    "ndvi": 0.5,
+    "yield_base": 0.0,
+    "yield_adj": 0.0,
+    "carbon": 0.0,
+    "era5": {},
+    "features": [0.5, 291.5, 0.025],
+    "ran": False,
+    "ndvi_tile_url": None,
     "confidence_pct": CONFIDENCE_FLOOR,
-    "yield_std":      0.0,
-    "conf_result":    None,
-    "crop":           "Wheat",
+    "yield_std": 0.0,
+    "conf_result": None,
+    "crop": "Wheat",
 }
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
@@ -218,20 +223,23 @@ for _k, _v in _DEFAULTS.items():
 # ─────────────────────────────────────────────────────────────────────────────
 
 with st.sidebar:
-    st.markdown("""
+    st.markdown(
+        """
     <div style="text-align:center;padding:1rem 0 .5rem">
       <div style="font-family:'Orbitron',monospace;font-size:1.05rem;font-weight:900;
                   color:#00ffaa;letter-spacing:3px">🛰️ TERRAVISION</div>
       <div style="font-size:.6rem;color:#5a7a96;letter-spacing:2px;
                   margin-top:.3rem;text-transform:uppercase">Satellite Intelligence · v3.0.0</div>
-    </div>""", unsafe_allow_html=True)
+    </div>""",
+        unsafe_allow_html=True,
+    )
     st.divider()
 
     _model_obj = _cached_model()
-    _gee_icon  = "🟢" if _GEE_STATUS == "live" else "🟡"
-    _gee_lbl   = "GEE Live" if _GEE_STATUS == "live" else "GEE Demo (location-aware)"
-    _mdl_icon  = "🟢" if _model_obj is not None else "🟡"
-    _mdl_lbl   = "Model Checkpoint" if _model_obj is not None else "Synthetic Mode"
+    _gee_icon = "🟢" if _GEE_STATUS == "live" else "🟡"
+    _gee_lbl = "GEE Live" if _GEE_STATUS == "live" else "GEE Demo (location-aware)"
+    _mdl_icon = "🟢" if _model_obj is not None else "🟡"
+    _mdl_lbl = "Model Checkpoint" if _model_obj is not None else "Synthetic Mode"
     st.markdown("**System Status**")
     st.markdown(f"{_gee_icon} {_gee_lbl}")
     st.markdown(f"{_mdl_icon} {_mdl_lbl}")
@@ -256,12 +264,15 @@ with st.sidebar:
 # HERO HEADER
 # ─────────────────────────────────────────────────────────────────────────────
 
-st.markdown("""
+st.markdown(
+    """
 <h1>🛰️ TERRAVISION AI</h1>
 <p style="color:#5a7a96;font-size:.8rem;letter-spacing:2.5px;text-transform:uppercase;
           margin-top:-.4rem;margin-bottom:.5rem">
   Satellite-Native Crop Intelligence at Planetary Scale
-</p>""", unsafe_allow_html=True)
+</p>""",
+    unsafe_allow_html=True,
+)
 st.divider()
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -271,23 +282,28 @@ st.divider()
 # ─────────────────────────────────────────────────────────────────────────────
 
 _PRESETS = {
-    "🌾 Kansas Wheat":   (39.0119, -98.4842, "Wheat"),
-    "🌾 Ukraine Wheat":  (49.9688,  36.2322, "Wheat"),
-    "🌾 Pakistan Wheat": (30.3753,  69.3451, "Wheat"),
-    "🌾 China Rice":     (30.5728, 104.0668, "Rice"),
-    "🌽 Brazil Maize":  (-14.2350, -51.9253, "Maize"),
+    "🌾 Kansas Wheat": (39.0119, -98.4842, "Wheat"),
+    "🌾 Ukraine Wheat": (49.9688, 36.2322, "Wheat"),
+    "🌾 Pakistan Wheat": (30.3753, 69.3451, "Wheat"),
+    "🌾 China Rice": (30.5728, 104.0668, "Rice"),
+    "🌽 Brazil Maize": (-14.2350, -51.9253, "Maize"),
 }
 
-st.markdown('<div class="preset-label">📍 Demo Presets — click to load</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="preset-label">📍 Demo Presets — click to load</div>',
+    unsafe_allow_html=True,
+)
 preset_cols = st.columns(len(_PRESETS))
-for col, (label, (p_lat, p_lon, p_crop)) in zip(preset_cols, _PRESETS.items(), strict=False):
+for col, (label, (p_lat, p_lon, p_crop)) in zip(
+    preset_cols, _PRESETS.items(), strict=False
+):
     with col:
         if st.button(label, use_container_width=True, key=f"preset_{label}"):
             # [FIX-B] write to session_state THEN rerun so number_inputs pick it up
-            st.session_state["lat"]  = p_lat
-            st.session_state["lon"]  = p_lon
+            st.session_state["lat"] = p_lat
+            st.session_state["lon"] = p_lon
             st.session_state["crop"] = p_crop
-            st.session_state["ran"]  = False
+            st.session_state["ran"] = False
             st.rerun()
 
 st.markdown("<br>", unsafe_allow_html=True)
@@ -311,7 +327,7 @@ with col_left:
         max_value=90.0,
         step=0.0001,
         format="%.4f",
-        key="lat",                  # ← binds directly to session_state["lat"]
+        key="lat",  # ← binds directly to session_state["lat"]
         help="Decimal degrees. Negative = Southern Hemisphere.",
     )
     lon = st.number_input(
@@ -320,7 +336,7 @@ with col_left:
         max_value=180.0,
         step=0.0001,
         format="%.4f",
-        key="lon",                  # ← binds directly to session_state["lon"]
+        key="lon",  # ← binds directly to session_state["lon"]
         help="Decimal degrees. Negative = Western Hemisphere.",
     )
 
@@ -348,17 +364,29 @@ with col_left:
         st.success(f"✅ Step 1 done — NDVI: {features[0]:.4f}")
 
         # Step 2 — ERA5 climate
-        with progress.container(), st.spinner("🌡️ Step 2/4 — Pulling ERA5-Land weather …"):
+        with (
+            progress.container(),
+            st.spinner("🌡️ Step 2/4 — Pulling ERA5-Land weather …"),
+        ):
             era5 = get_era5_features(lat, lon)
             st.session_state["era5"] = era5
-        st.success(f"✅ Step 2 done — Temp: {era5['temp_c']:.1f}°C · Precip: {era5['precip_mm_month']:.0f} mm/mo")
+        st.success(
+            f"✅ Step 2 done — Temp: {era5['temp_c']:.1f}°C · Precip: {era5['precip_mm_month']:.0f} mm/mo"
+        )
 
         # Step 3 — NDVI heatmap tile
         if show_heatmap:
-            with progress.container(), st.spinner("🗺️ Step 3/4 — Building NDVI heatmap …"):
+            with (
+                progress.container(),
+                st.spinner("🗺️ Step 3/4 — Building NDVI heatmap …"),
+            ):
                 ndvi_tile_url = get_ndvi_tile_url(lat, lon)
                 st.session_state["ndvi_tile_url"] = ndvi_tile_url
-            _tile_status = "✅ Step 3 done — Heatmap ready" if ndvi_tile_url else "✅ Step 3 done — Heatmap unavailable in Demo Mode"
+            _tile_status = (
+                "✅ Step 3 done — Heatmap ready"
+                if ndvi_tile_url
+                else "✅ Step 3 done — Heatmap unavailable in Demo Mode"
+            )
             st.success(_tile_status)
         else:
             st.session_state["ndvi_tile_url"] = None
@@ -376,76 +404,94 @@ with col_left:
                 raw = _synthetic_forward(features, crop)
                 conf_result = _synthetic_confidence(raw)
 
-            ndvi       = features[0]
+            ndvi = features[0]
             yield_base = compute_yield(raw, ndvi, crop)
-            yield_adj  = era5_yield_adjustment(
+            yield_adj = era5_yield_adjustment(
                 yield_base, era5["temp_c"], era5["precip_mm_month"], crop
             )
-            carbon     = yield_adj * CARBON_FRACTION
+            carbon = yield_adj * CARBON_FRACTION
 
-        st.success(f"✅ Step 4 done — Yield: {yield_adj:.2f} t/ha · Confidence: {conf_result['confidence_pct']:.1f}%")
+        st.success(
+            f"✅ Step 4 done — Yield: {yield_adj:.2f} t/ha · Confidence: {conf_result['confidence_pct']:.1f}%"
+        )
 
         # Persist results
-        st.session_state.update({
-            "ndvi":           ndvi,
-            "yield_base":     yield_base,
-            "yield_adj":      yield_adj,
-            "carbon":         carbon,
-            "ran":            True,
-            "confidence_pct": conf_result["confidence_pct"],
-            "yield_std":      conf_result["std_yield"],
-            "conf_result":    conf_result,
-            "crop":           crop,
-        })
-        st.rerun()   # clean rerun so results render in the proper layout
+        st.session_state.update(
+            {
+                "ndvi": ndvi,
+                "yield_base": yield_base,
+                "yield_adj": yield_adj,
+                "carbon": carbon,
+                "ran": True,
+                "confidence_pct": conf_result["confidence_pct"],
+                "yield_std": conf_result["std_yield"],
+                "conf_result": conf_result,
+                "crop": crop,
+            }
+        )
+        st.rerun()  # clean rerun so results render in the proper layout
 
     # ── RESULTS (shown after inference on clean rerun) ─────────────────────
     if st.session_state["ran"]:
-        _ndvi      = st.session_state["ndvi"]
-        _ybase     = st.session_state["yield_base"]
-        _yadj      = st.session_state["yield_adj"]
-        _carbon    = st.session_state["carbon"]
-        _era5      = st.session_state["era5"]
-        _conf      = st.session_state["confidence_pct"]
-        _std       = st.session_state["yield_std"]
-        _conf_res  = st.session_state["conf_result"]
-        _src_lbl   = "ERA5-Land Live" if _era5.get("source") == "era5-land" else "ERA5 Demo Prior"
+        _ndvi = st.session_state["ndvi"]
+        _ybase = st.session_state["yield_base"]
+        _yadj = st.session_state["yield_adj"]
+        _carbon = st.session_state["carbon"]
+        _era5 = st.session_state["era5"]
+        _conf = st.session_state["confidence_pct"]
+        _std = st.session_state["yield_std"]
+        _conf_res = st.session_state["conf_result"]
+        _src_lbl = (
+            "ERA5-Land Live" if _era5.get("source") == "era5-land" else "ERA5 Demo Prior"
+        )
 
         st.markdown(
             f'<div style="display:inline-block;background:rgba(0,200,255,.12);'
-            f'border:1px solid rgba(0,200,255,.3);border-radius:8px;padding:.2rem .7rem;'
-            f'font-size:.65rem;letter-spacing:1.5px;text-transform:uppercase;'
+            f"border:1px solid rgba(0,200,255,.3);border-radius:8px;padding:.2rem .7rem;"
+            f"font-size:.65rem;letter-spacing:1.5px;text-transform:uppercase;"
             f'color:#00c8ff;font-family:Orbitron,monospace;margin-bottom:.6rem">'
-            f'🌡️ {_src_lbl}</div>',
+            f"🌡️ {_src_lbl}</div>",
             unsafe_allow_html=True,
         )
 
         m1, m2 = st.columns(2)
-        m1.metric("ERA5-Adj. Yield", f"{_yadj:.2f} t/ha",
-                  delta=f"{_yadj - _ybase:+.2f} vs base")
+        m1.metric(
+            "ERA5-Adj. Yield", f"{_yadj:.2f} t/ha", delta=f"{_yadj - _ybase:+.2f} vs base"
+        )
         m2.metric("NDVI Index", f"{_ndvi:.4f}")
 
         m3, m4 = st.columns(2)
-        m3.metric("Base Yield",   f"{_ybase:.2f} t/ha")
+        m3.metric("Base Yield", f"{_ybase:.2f} t/ha")
         m4.metric("Carbon Est.", f"{_carbon:.2f} Mg C/ha")
 
         m5, m6 = st.columns(2)
-        m5.metric("Confidence",  f"{_conf:.1f} %")
+        m5.metric("Confidence", f"{_conf:.1f} %")
         m6.metric("Yield ± Std", f"±{_std:.4f} t/ha")
 
         st.divider()
 
         label, action, alert_type = ndvi_status(_ndvi)
-        {"error": st.error, "warning": st.warning,
-         "info":  st.info,  "success": st.success}[alert_type](
-            f"**{label}**\n\n{action}"
-        )
+        {
+            "error": st.error,
+            "warning": st.warning,
+            "info": st.info,
+            "success": st.success,
+        }[alert_type](f"**{label}**\n\n{action}")
 
         # Download report
         if _conf_res:
             report_txt = build_report(
-                lat, lon, crop, _ndvi, _ybase, _yadj,
-                _carbon, label, action, _era5, _conf_res,
+                lat,
+                lon,
+                crop,
+                _ndvi,
+                _ybase,
+                _yadj,
+                _carbon,
+                label,
+                action,
+                _era5,
+                _conf_res,
             )
             st.download_button(
                 label="📥 Download Intelligence Report",
@@ -459,7 +505,8 @@ with col_right:
     st.subheader("🗺️ Satellite Intelligence View")
 
     if show_heatmap:
-        st.markdown("""
+        st.markdown(
+            """
         <div style="margin-bottom:.5rem">
           <div style="font-size:.62rem;letter-spacing:1.5px;color:#5a7a96;
                       text-transform:uppercase;margin-bottom:.3rem">NDVI Heatmap Legend</div>
@@ -476,7 +523,9 @@ with col_right:
           <div style="display:flex;justify-content:space-between;font-size:.58rem;color:#5a7a96">
             <span>Bare</span><span>Low</span><span>Moderate</span><span>Dense</span>
           </div>
-        </div>""", unsafe_allow_html=True)
+        </div>""",
+            unsafe_allow_html=True,
+        )
 
     # Build map using session_state lat/lon (always in sync with inputs)
     _map_lat = st.session_state["lat"]
@@ -501,7 +550,7 @@ with col_right:
         ).add_to(sat_map)
         folium.LayerControl(collapsed=False).add_to(sat_map)
 
-    _ran   = st.session_state["ran"]
+    _ran = st.session_state["ran"]
     _yadj2 = st.session_state["yield_adj"]
     _ndvi2 = st.session_state["ndvi"]
 
@@ -512,8 +561,7 @@ with col_right:
     )
     if _ran:
         popup_html += (
-            f"<br><b>NDVI:</b> {_ndvi2:.4f}"
-            f"<br><b>Yield:</b> {_yadj2:.2f} t/ha"
+            f"<br><b>NDVI:</b> {_ndvi2:.4f}" f"<br><b>Yield:</b> {_yadj2:.2f} t/ha"
         )
 
     folium.Marker(
@@ -524,16 +572,25 @@ with col_right:
     ).add_to(sat_map)
 
     folium.Circle(
-        location=[_map_lat, _map_lon], radius=500,
-        color="#00ffaa", weight=1.5,
-        fill=True, fill_color="#00ffaa", fill_opacity=0.10,
+        location=[_map_lat, _map_lon],
+        radius=500,
+        color="#00ffaa",
+        weight=1.5,
+        fill=True,
+        fill_color="#00ffaa",
+        fill_opacity=0.10,
         tooltip="500 m analysis buffer",
     ).add_to(sat_map)
 
     folium.Circle(
-        location=[_map_lat, _map_lon], radius=10_000,
-        color="#00c8ff", weight=1.0, dash_array="6 4",
-        fill=True, fill_color="#00c8ff", fill_opacity=0.03,
+        location=[_map_lat, _map_lon],
+        radius=10_000,
+        color="#00c8ff",
+        weight=1.0,
+        dash_array="6 4",
+        fill=True,
+        fill_color="#00c8ff",
+        fill_opacity=0.03,
         tooltip="10 km ERA5-Land sampling buffer",
     ).add_to(sat_map)
 
@@ -546,11 +603,11 @@ with col_right:
 st.divider()
 st.subheader("📊 Multi-Modal Intelligence Panel")
 
-_ndvi3  = st.session_state["ndvi"]
+_ndvi3 = st.session_state["ndvi"]
 _ybase3 = st.session_state["yield_base"]
-_yadj3  = st.session_state["yield_adj"]
+_yadj3 = st.session_state["yield_adj"]
 _era5_3 = st.session_state["era5"]
-_ran3   = st.session_state["ran"]
+_ran3 = st.session_state["ran"]
 
 fi1, fi2, fi3, fi4, fi5 = st.columns(5)
 
@@ -600,9 +657,9 @@ with fi5:
 st.divider()
 st.markdown(
     f'<div style="text-align:center;color:#3a5a74;font-size:.72rem;padding:.4rem 0 1.5rem">'
-    f'© {datetime.utcnow().year} TerraVision AI · '
+    f"© {datetime.utcnow().year} TerraVision AI · "
     f'<strong style="color:#00ffaa">Ahmad Abbas Hussain</strong>'
-    f'<br><br>🛰️ Sentinel-2 · 🌡️ ERA5-Land · ⚡ PyTorch · 🌿 GEE · 🚀 Streamlit'
-    f'</div>',
+    f"<br><br>🛰️ Sentinel-2 · 🌡️ ERA5-Land · ⚡ PyTorch · 🌿 GEE · 🚀 Streamlit"
+    f"</div>",
     unsafe_allow_html=True,
 )
