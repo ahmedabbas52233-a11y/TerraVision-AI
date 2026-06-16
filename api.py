@@ -1,20 +1,3 @@
-"""
-TerraVision AI · api.py  (root entry point — uvicorn api:app)
-FastAPI REST wrapper — V2 transformer, live MC Dropout confidence, async GEE.
-
-Author  : Ahmad Abbas Hussain <ahmedabbas52233@gmail.com>
-GitHub  : https://github.com/ahmedabbas52233-a11y/TerraVision-AI
-Version : 3.0.0
-License : CC BY 4.0
-
-Fixes applied in this version
-──────────────────────────────
-[FIX-4] _init_ee() now logs a targeted error message when the GCP project is
-        not registered for Earth Engine, rather than a generic exception dump.
-[FIX-5] Auth order corrected: service account JSON is tried before ADC so
-        that cloud deployments (Railway, Docker) always use the env var.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -65,18 +48,37 @@ log = logging.getLogger("terravision.api")
 # ── Earth Engine init ─────────────────────────────────────────────────────────
 
 
+def _normalise_secret(val: object) -> str | None:
+    """
+    Coerce whatever the env / secret store passes in into a plain JSON string.
+
+    os.getenv() → str (fine as-is)
+    Streamlit secrets → AttrDict (must be re-serialised)
+    Returns None when val is falsy.
+    """
+    if not val:
+        return None
+    if isinstance(val, (str, bytes, bytearray)):
+        return val if isinstance(val, str) else val.decode()
+    try:
+        return json.dumps(dict(val))  # type: ignore[call-overload]
+    except Exception:
+        return str(val)
+
+
 def _init_ee() -> bool:
     """
     Initialise GEE for the API context.
-    Priority order (FIX-5):
-      1. GCP_SERVICE_ACCOUNT_JSON env var  (cloud deployments)
+    Priority:
+      1. GCP_SERVICE_ACCOUNT_JSON env var  (Railway / Docker)
       2. Application Default Credentials   (local dev)
-    Logs a targeted message when the project is not registered (FIX-4).
+    Handles AttrDict from Streamlit secrets transparently.
     """
     import ee
 
     # ── 1. Service account env var ────────────────────────────────────────────
-    sa = os.getenv("GCP_SERVICE_ACCOUNT_JSON")
+    raw_sa = os.getenv("GCP_SERVICE_ACCOUNT_JSON")
+    sa = _normalise_secret(raw_sa)
     if sa:
         try:
             info = json.loads(sa)
@@ -87,7 +89,7 @@ def _init_ee() -> bool:
         except json.JSONDecodeError:
             log.error(
                 "GCP_SERVICE_ACCOUNT_JSON is not valid JSON — "
-                "copy the full key file content without any line breaks."
+                "paste the full key file content as a single-line string."
             )
             return False
         except Exception as exc:

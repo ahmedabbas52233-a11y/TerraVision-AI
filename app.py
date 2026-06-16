@@ -115,6 +115,25 @@ hr{border-color:var(--border)!important}
 _GEE_STATUS = "demo"
 
 
+def _normalise_secret(val: object) -> str | None:
+    """
+    Convert whatever the secret store returns into a plain JSON string.
+
+    Streamlit parses .toml secrets into AttrDict objects; os.getenv() returns
+    a plain str; both must reach json.loads() as a str.  If the value is already
+    a dict/AttrDict, re-serialise it.  Returns None if val is falsy.
+    """
+    if not val:
+        return None
+    if isinstance(val, (str, bytes, bytearray)):
+        return val if isinstance(val, str) else val.decode()
+    # AttrDict, dict, or any other mapping
+    try:
+        return json.dumps(dict(val))  # type: ignore[call-overload]
+    except Exception:
+        return str(val)
+
+
 def _init_ee() -> None:
     global _GEE_STATUS
     # 1. Application Default Credentials (local dev)
@@ -124,15 +143,17 @@ def _init_ee() -> None:
         return
     except Exception:
         pass
-    # 2. Streamlit secrets
-    secret_json = None
+    # 2. Streamlit secrets (returns AttrDict — normalised below)
+    raw: object = None
     with contextlib.suppress(Exception):
-        secret_json = st.secrets.get("GCP_SERVICE_ACCOUNT_JSON") or st.secrets.get(
+        raw = st.secrets.get("GCP_SERVICE_ACCOUNT_JSON") or st.secrets.get(
             "GCP_SERVICE_ACCOUNT"
         )
-    # 3. Environment variable (Railway / Docker)
-    if not secret_json:
-        secret_json = os.getenv("GCP_SERVICE_ACCOUNT_JSON")
+    # 3. Environment variable (Railway / Docker — always a plain str)
+    if not raw:
+        raw = os.getenv("GCP_SERVICE_ACCOUNT_JSON")
+
+    secret_json = _normalise_secret(raw)
     if not secret_json:
         _GEE_STATUS = "demo"
         return
