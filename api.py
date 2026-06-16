@@ -14,7 +14,6 @@ Fixes applied in this version
 [FIX-5] Auth order corrected: service account JSON is tried before ADC so
         that cloud deployments (Railway, Docker) always use the env var.
 """
-
 from __future__ import annotations
 
 import asyncio
@@ -64,7 +63,6 @@ log = logging.getLogger("terravision.api")
 
 # ── Earth Engine init ─────────────────────────────────────────────────────────
 
-
 def _init_ee() -> bool:
     """
     Initialise GEE for the API context.
@@ -96,8 +94,7 @@ def _init_ee() -> bool:
                 log.error(
                     "GEE project not registered for Earth Engine. "
                     "Visit https://console.cloud.google.com/earth-engine/configuration "
-                    "and register the project, then re-deploy. Details: %s",
-                    exc,
+                    "and register the project, then re-deploy. Details: %s", exc
                 )
             else:
                 log.warning("GEE service-account init failed (demo mode): %s", exc)
@@ -114,12 +111,12 @@ def _init_ee() -> bool:
 
 
 _GEE_READY: bool = _init_ee()
-_MODEL = load_model()
+_MODEL             = load_model()
 _MODEL_READY: bool = _MODEL is not None
-_IS_V2: bool = _MODEL is not None and is_v2(_MODEL)
+_IS_V2: bool       = _MODEL is not None and is_v2(_MODEL)
 
 if _MODEL_READY:
-    _n = sum(p.numel() for p in _MODEL.parameters())  # type: ignore[union-attr]
+    _n = sum(p.numel() for p in _MODEL.parameters())   # type: ignore[union-attr]
     log.info("Model loaded — %s  %d params", type(_MODEL).__name__, _n)
 else:
     log.error(
@@ -134,8 +131,8 @@ limiter = Limiter(key_func=get_remote_address)
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-_API_KEY: str = os.getenv("TERRAVISION_API_KEY", "dev-insecure-key")
-_ENV: str = os.getenv("TERRAVISION_ENV", "development")
+_API_KEY: str      = os.getenv("TERRAVISION_API_KEY", "dev-insecure-key")
+_ENV: str          = os.getenv("TERRAVISION_ENV", "development")
 _CORS_ORIGINS: list[str] = (
     ["*"]
     if _ENV == "development"
@@ -157,7 +154,6 @@ async def require_api_key(k: str | None = Security(_hdr)) -> str:
 
 
 # ── Noop coroutine ────────────────────────────────────────────────────────────
-
 
 async def _noop_str() -> str | None:
     return None
@@ -207,12 +203,12 @@ CropType = Literal["Wheat", "Rice", "Maize", "Soybean"]
 
 
 class PredictRequest(BaseModel):
-    lat: float = Field(..., ge=-90.0, le=90.0)
-    lon: float = Field(..., ge=-180.0, le=180.0)
-    crop: CropType = Field("Wheat")
+    lat: float          = Field(..., ge=-90.0, le=90.0)
+    lon: float          = Field(..., ge=-180.0, le=180.0)
+    crop: CropType      = Field("Wheat")
     include_ndvi_tile: bool = Field(False)
-    include_report: bool = Field(False)
-    mc_passes: int = Field(
+    include_report: bool    = Field(False)
+    mc_passes: int      = Field(
         20, ge=5, le=100, description="MC Dropout passes for confidence (5-100)"
     )
 
@@ -262,7 +258,7 @@ class PredictResponse(BaseModel):
     # Meta
     model_name: str
     model_version: str
-    gee_mode: str  # "live" | "demo"
+    gee_mode: str       # "live" | "demo"
     inference_ms: float
     generated_utc: str
     report: str | None = None
@@ -293,11 +289,11 @@ v1 = APIRouter(prefix="/v1")
 @v1.get("/", tags=["Meta"])
 async def root() -> dict[str, str]:
     return {
-        "name": "TerraVision AI API",
+        "name":    "TerraVision AI API",
         "version": MODEL_VERSION,
-        "docs": "/v1/docs",
-        "health": "/v1/health",
-        "github": "https://github.com/ahmedabbas52233-a11y/TerraVision-AI",
+        "docs":    "/v1/docs",
+        "health":  "/v1/health",
+        "github":  "https://github.com/ahmedabbas52233-a11y/TerraVision-AI",
     }
 
 
@@ -354,11 +350,7 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
     t0 = time.perf_counter()
     log.info(
         "Inference lat=%.4f lon=%.4f crop=%s v2=%s gee=%s",
-        req.lat,
-        req.lon,
-        req.crop,
-        _IS_V2,
-        _GEE_READY,
+        req.lat, req.lon, req.crop, _IS_V2, _GEE_READY,
     )
 
     # ── Parallel GEE calls ────────────────────────────────────────────────────
@@ -385,7 +377,7 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
             tensor = torch.tensor([features], dtype=torch.float32)
 
         with torch.no_grad():
-            raw: float = _MODEL(tensor).item()  # type: ignore[union-attr]
+            raw: float = _MODEL(tensor).item()   # type: ignore[union-attr]
 
         if _IS_V2:
             ndvi_val = float(cast(list[list[float]], features)[0][0])
@@ -393,7 +385,7 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
             ndvi_val = float(cast(list[float], features)[0])
 
         ybase = compute_yield(raw, ndvi_val, req.crop)
-        yadj = era5_yield_adjustment(
+        yadj  = era5_yield_adjustment(
             ybase, era5["temp_c"], era5["precip_mm_month"], req.crop
         )
         conf = mc_dropout_confidence(_MODEL, tensor, n_passes=req.mc_passes)  # type: ignore
@@ -401,34 +393,21 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
 
     ndvi, yield_base, yield_adj, conf = await asyncio.to_thread(_infer)
 
-    carbon = yield_adj * CARBON_FRACTION
-    lbl, act, alrt = ndvi_status(ndvi)
-    ms = (time.perf_counter() - t0) * 1_000
-    gee_mode = "live" if _GEE_READY else "demo"
+    carbon           = yield_adj * CARBON_FRACTION
+    lbl, act, alrt   = ndvi_status(ndvi)
+    ms               = (time.perf_counter() - t0) * 1_000
+    gee_mode         = "live" if _GEE_READY else "demo"
 
     log.info(
         "Done — NDVI=%.4f yield=%.2f conf=%.1f%% mode=%s in %.0f ms",
-        ndvi,
-        yield_adj,
-        conf["confidence_pct"],
-        gee_mode,
-        ms,
+        ndvi, yield_adj, conf["confidence_pct"], gee_mode, ms,
     )
 
     report_txt: str | None = None
     if req.include_report:
         report_txt = build_report(
-            req.lat,
-            req.lon,
-            req.crop,
-            ndvi,
-            yield_base,
-            yield_adj,
-            carbon,
-            lbl,
-            act,
-            era5,
-            conf,
+            req.lat, req.lon, req.crop, ndvi, yield_base, yield_adj,
+            carbon, lbl, act, era5, conf,
         )
 
     return PredictResponse(
@@ -452,7 +431,7 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
         ci_95_upper=conf["ci_95_upper"],
         carbon_mg_c_ha=round(carbon, 3),
         carbon_fraction=CARBON_FRACTION,
-        model_name=type(_MODEL).__name__,  # type: ignore[union-attr]
+        model_name=type(_MODEL).__name__,   # type: ignore[union-attr]
         model_version=MODEL_VERSION,
         gee_mode=gee_mode,
         inference_ms=round(ms, 1),
