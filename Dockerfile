@@ -11,7 +11,7 @@
 # which is exactly what production requires.
 # ─────────────────────────────────────────────────────────────────────────────
 
-FROM python:3.11-slim
+FROM python:3.11-slim AS runtime
 
 # ── System deps ───────────────────────────────────────────────────────────────
 # libgomp1  : OpenMP runtime required by PyTorch CPU kernels
