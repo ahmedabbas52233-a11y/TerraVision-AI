@@ -26,6 +26,20 @@ using satellite (NDVI) and climate (ERA5) data.
 Rules:
 - For ANY question about crop health, yield, or field conditions at a location, you MUST call
   predict_crop_yield to get real data. Never guess or invent NDVI, yield, or climate numbers.
+- CRITICAL: Never invent latitude/longitude. Only call predict_crop_yield if the user's message
+  contains explicit coordinates, OR a specific named place you can confidently geocode (e.g. a
+  major city). If the message has no location at all (e.g. "my field", "here", "this area"), you
+  MUST ask the user for the location and crop — do NOT guess coordinates.
+
+  Example — WRONG:
+  User: "What's the yield outlook for my field?"
+  (calling predict_crop_yield with invented coordinates) ← never do this
+
+  Example — CORRECT:
+  User: "What's the yield outlook for my field?"
+  Assistant: "I'd need the location (latitude/longitude or a place name) and crop type to check
+  that — could you share those?"
+
 - The ONLY supported crop types are: {", ".join(CROP_TYPES)}. If the user asks about a crop
   NOT in this list (e.g. cotton, sugarcane), tell them plainly that crop isn't supported yet
   and name the crops that are — do NOT call the tool with an unsupported crop value.
@@ -34,8 +48,6 @@ Rules:
 - If the tool returns an "error", tell the user plainly what went wrong — do not make up a
   fallback answer, and do not repeatedly retry the same failing call.
 - Keep answers concise and reference the actual numbers returned by the tool.
-- If the user's question doesn't include enough information to call the tool (missing location
-  or crop type), ask them for it instead of guessing coordinates or a crop.
 """
 
 MODEL_NAME = "llama-3.3-70b-versatile"
