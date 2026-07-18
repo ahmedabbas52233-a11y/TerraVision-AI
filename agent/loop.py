@@ -94,7 +94,7 @@ def run_agent(
                 messages=messages,  # type: ignore[arg-type]
                 tools=TOOL_SCHEMAS,  # type: ignore[arg-type]
                 tool_choice="auto",
-                temperature=0.2,
+                temperature=0,
             )
         except groq.BadRequestError as e:
             # The model generated an argument that failed schema validation server-side
