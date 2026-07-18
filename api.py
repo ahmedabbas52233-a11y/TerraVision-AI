@@ -1,14 +1,18 @@
+"""TerraVision AI API — satellite-native crop yield intelligence."""
+
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
 import os
+import random
 import time
 from datetime import UTC, datetime
 from typing import Literal, cast
 
 import torch
+from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Security, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
@@ -22,6 +26,7 @@ from starlette.types import ExceptionHandler
 
 from terravision.core import (
     CARBON_FRACTION,
+    CONFIDENCE_FLOOR,
     CROP_PARAMS,
     MODEL_VERSION,
     ConfidenceResult,
@@ -37,6 +42,9 @@ from terravision.core import (
     mc_dropout_confidence,
     ndvi_status,
 )
+
+# Load .env BEFORE anything below reads os.getenv (API key, GEE creds, etc.)
+load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -124,10 +132,11 @@ if _MODEL_READY:
     _n = sum(p.numel() for p in _MODEL.parameters())  # type: ignore[union-attr]
     log.info("Model loaded — %s  %d params", type(_MODEL).__name__, _n)
 else:
-    log.error(
-        "No model checkpoint found in models/. "
-        "Run `python train.py` to generate terravision_v1.pth, "
-        "then restart the API server."
+    log.warning(
+        "No usable model checkpoint — running in MOCK inference mode. "
+        "Predictions are placeholder values, not real transformer output. "
+        "Run `python -m terravision.train` to generate a checkpoint matching "
+        "the current core.py architecture, then restart the API server."
     )
 
 # ── Rate limiter ──────────────────────────────────────────────────────────────
@@ -163,6 +172,34 @@ async def require_api_key(k: str | None = Security(_hdr)) -> str:
 
 async def _noop_str() -> str | None:
     return None
+
+
+# ── Mock inference fallback ───────────────────────────────────────────────────
+# Used only when no trained checkpoint could be loaded (see load_model() warnings
+# above). Deterministic per (lat, lon, crop) so repeated calls for the same field
+# return consistent mock values instead of random noise on every request.
+
+
+def _mock_infer(lat: float, lon: float, crop: str) -> tuple[float, float]:
+    """Return a deterministic (ndvi, raw_model_output) pair without a real model."""
+    seed = int(abs(lat * 10_000 + lon * 10_000)) % (2**31)
+    rng = random.Random(seed)
+    prior = CROP_PARAMS[crop]["ndvi_prior"]
+    ndvi_val = float(min(1.0, max(-0.1, prior + rng.uniform(-0.08, 0.08))))
+    raw = rng.uniform(0.30, 0.75)
+    return ndvi_val, raw
+
+
+def _mock_confidence(mean_yield: float) -> ConfidenceResult:
+    """Fixed-shape confidence result for mock mode — clearly not MC Dropout."""
+    std = abs(mean_yield) * 0.10
+    return ConfidenceResult(
+        confidence_pct=CONFIDENCE_FLOOR,
+        std_yield=round(std, 4),
+        ci_95_lower=round(mean_yield - 1.96 * std, 4),
+        ci_95_upper=round(mean_yield + 1.96 * std, 4),
+        n_passes=0,
+    )
 
 
 # ── App ───────────────────────────────────────────────────────────────────────
@@ -253,7 +290,7 @@ class PredictResponse(BaseModel):
     yield_base_t_ha: float
     yield_adj_t_ha: float
     yield_delta_t_ha: float
-    # Uncertainty — real MC Dropout
+    # Uncertainty — real MC Dropout, or fixed placeholder in mock mode
     confidence_pct: float
     yield_std_t_ha: float
     ci_95_lower: float
@@ -264,6 +301,7 @@ class PredictResponse(BaseModel):
     # Meta
     model_name: str
     model_version: str
+    model_mode: str  # "trained" | "mock"
     gee_mode: str  # "live" | "demo"
     inference_ms: float
     generated_utc: str
@@ -305,7 +343,7 @@ async def root() -> dict[str, str]:
 
 @v1.get("/health", response_model=HealthResponse, tags=["Meta"])
 async def health() -> HealthResponse:
-    mn = type(_MODEL).__name__ if _MODEL else "none"
+    mn = type(_MODEL).__name__ if _MODEL else "mock"
     return HealthResponse(
         status="ok" if (_MODEL_READY and _GEE_READY) else "degraded",
         model_ready=_MODEL_READY,
@@ -343,51 +381,48 @@ async def crops() -> list[CropInfo]:
 )
 @limiter.limit("30/minute")
 async def predict(request: Request, req: PredictRequest) -> PredictResponse:
-    if not _MODEL_READY or _MODEL is None:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "Model not loaded. "
-                "Commit models/terravision_v1.pth and redeploy, "
-                "or run `python train.py` and restart."
-            ),
-        )
-
     t0 = time.perf_counter()
     log.info(
-        "Inference lat=%.4f lon=%.4f crop=%s v2=%s gee=%s",
+        "Inference lat=%.4f lon=%.4f crop=%s v2=%s gee=%s model_ready=%s",
         req.lat,
         req.lon,
         req.crop,
         _IS_V2,
         _GEE_READY,
+        _MODEL_READY,
     )
 
-    # ── Parallel GEE calls ────────────────────────────────────────────────────
-    if _IS_V2:
+    # ── Satellite + climate features (real or demo, depending on GEE) ─────────
+    if _MODEL_READY and _IS_V2:
         feat_coro = asyncio.to_thread(get_live_features_v2, req.lat, req.lon, req.crop)
-    else:
+    elif _MODEL_READY:
         feat_coro = asyncio.to_thread(get_live_features, req.lat, req.lon, req.crop)
+    else:
+        feat_coro = _noop_str()  # not used in mock mode — placeholder awaitable
 
-    features, era5, ndvi_tile_url = await asyncio.gather(
-        feat_coro,
-        asyncio.to_thread(get_era5_features, req.lat, req.lon),
-        (
-            asyncio.to_thread(get_ndvi_tile_url, req.lat, req.lon)
-            if req.include_ndvi_tile
-            else _noop_str()
-        ),
+    era5_coro = asyncio.to_thread(get_era5_features, req.lat, req.lon)
+    tile_coro = (
+        asyncio.to_thread(get_ndvi_tile_url, req.lat, req.lon)
+        if req.include_ndvi_tile
+        else _noop_str()
     )
 
-    # ── Inference + MC Dropout confidence ─────────────────────────────────────
-    def _infer() -> tuple[float, float, float, ConfidenceResult]:
-        if _IS_V2:
-            tensor = torch.tensor([features], dtype=torch.float32)
-        else:
-            tensor = torch.tensor([features], dtype=torch.float32)
+    features, era5, ndvi_tile_url = await asyncio.gather(feat_coro, era5_coro, tile_coro)
 
+    # ── Inference — real model, or deterministic mock fallback ────────────────
+    def _infer() -> tuple[float, float, float, ConfidenceResult, str]:
+        if not _MODEL_READY or _MODEL is None:
+            ndvi_val, raw = _mock_infer(req.lat, req.lon, req.crop)
+            ybase = compute_yield(raw, ndvi_val, req.crop)
+            yadj = era5_yield_adjustment(
+                ybase, era5["temp_c"], era5["precip_mm_month"], req.crop
+            )
+            conf = _mock_confidence(yadj)
+            return ndvi_val, ybase, yadj, conf, "mock"
+
+        tensor = torch.tensor([features], dtype=torch.float32)
         with torch.no_grad():
-            raw: float = _MODEL(tensor).item()  # type: ignore[union-attr]
+            raw = _MODEL(tensor).item()
 
         if _IS_V2:
             ndvi_val = float(cast(list[list[float]], features)[0][0])
@@ -398,10 +433,10 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
         yadj = era5_yield_adjustment(
             ybase, era5["temp_c"], era5["precip_mm_month"], req.crop
         )
-        conf = mc_dropout_confidence(_MODEL, tensor, n_passes=req.mc_passes)  # type: ignore
-        return ndvi_val, ybase, yadj, conf
+        conf = mc_dropout_confidence(_MODEL, tensor, n_passes=req.mc_passes)
+        return ndvi_val, ybase, yadj, conf, "trained"
 
-    ndvi, yield_base, yield_adj, conf = await asyncio.to_thread(_infer)
+    ndvi, yield_base, yield_adj, conf, model_mode = await asyncio.to_thread(_infer)
 
     carbon = yield_adj * CARBON_FRACTION
     lbl, act, alrt = ndvi_status(ndvi)
@@ -409,10 +444,11 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
     gee_mode = "live" if _GEE_READY else "demo"
 
     log.info(
-        "Done — NDVI=%.4f yield=%.2f conf=%.1f%% mode=%s in %.0f ms",
+        "Done — NDVI=%.4f yield=%.2f conf=%.1f%% model_mode=%s gee_mode=%s in %.0f ms",
         ndvi,
         yield_adj,
         conf["confidence_pct"],
+        model_mode,
         gee_mode,
         ms,
     )
@@ -454,8 +490,9 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
         ci_95_upper=conf["ci_95_upper"],
         carbon_mg_c_ha=round(carbon, 3),
         carbon_fraction=CARBON_FRACTION,
-        model_name=type(_MODEL).__name__,  # type: ignore[union-attr]
+        model_name=type(_MODEL).__name__ if _MODEL else "mock",
         model_version=MODEL_VERSION,
+        model_mode=model_mode,
         gee_mode=gee_mode,
         inference_ms=round(ms, 1),
         generated_utc=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),
