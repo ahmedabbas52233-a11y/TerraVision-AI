@@ -17,8 +17,6 @@ API_KEY = os.getenv("TERRAVISION_API_KEY", "dev-insecure-key")
 
 CROP_TYPES = ["Wheat", "Rice", "Maize", "Soybean"]
 
-# ---- Tool schema (what the LLM sees) ----
-
 TOOL_SCHEMAS = [
     {
         "type": "function",
@@ -74,7 +72,6 @@ def predict_crop_yield(
         resp.raise_for_status()
         data = resp.json()
 
-        # Surface demo/mock flags so the agent (and eval) can tell fake from real data
         notes = []
         if data.get("gee_mode") == "demo":
             notes.append(

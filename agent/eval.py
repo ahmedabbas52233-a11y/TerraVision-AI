@@ -1,12 +1,5 @@
 """TerraVision Agent — evaluation harness.
 
-Formalizes manual test cases into automated checks:
-  1. Unsupported crop → refuses cleanly, no tool call with bad value
-  2. Missing required info → asks for clarification, no tool call
-  3. Invalid parameters → tool call made, but returns a validation error
-  4. General knowledge question → answers directly, NO tool call at all
-  5. Multi-location comparison → calls the tool correctly for each location
-
 Run: python -m agent.eval
 """
 
@@ -27,7 +20,6 @@ class EvalCase:
     name: str
     question: str
     check: Callable[[dict[str, Any]], tuple[bool, str]]
-    # check receives the run_agent() result and returns (passed, reason)
 
 
 def _no_tool_call(result: dict[str, Any]) -> tuple[bool, str]:
@@ -45,7 +37,6 @@ def _tool_called_with_valid_crop(result: dict[str, Any]) -> tuple[bool, str]:
 
 
 def _no_hallucinated_numbers_on_error(result: dict[str, Any]) -> tuple[bool, str]:
-    """If every tool call errored, the final answer must not contain a t/ha figure."""
     all_errored = all("error" in step["result"] for step in result["trace"])
     if not all_errored:
         return True, "at least one tool call succeeded — no error-hallucination risk"
@@ -90,7 +81,9 @@ EVAL_CASES: list[EvalCase] = [
         question="What's the cotton yield outlook near Multan, 30.2, 71.5?",
         check=lambda r: (
             _tool_called_with_valid_crop(r)[0] and _no_hallucinated_numbers_on_error(r)[0],
-            "; ".join([_tool_called_with_valid_crop(r)[1], _no_hallucinated_numbers_on_error(r)[1]]),
+            "; ".join(
+                [_tool_called_with_valid_crop(r)[1], _no_hallucinated_numbers_on_error(r)[1]]
+            ),
         ),
     ),
     EvalCase(

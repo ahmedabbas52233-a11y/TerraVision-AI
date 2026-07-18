@@ -68,6 +68,7 @@ def _looks_like_yield_question(text: str) -> bool:
         return False
     return any(kw in lowered for kw in _YIELD_KEYWORDS)
 
+
 def _validate_args(args: dict[str, Any]) -> str | None:
     """Return an error string if args are invalid, else None."""
     lat, lon, crop = args.get("lat"), args.get("lon"), args.get("crop")
@@ -109,8 +110,6 @@ def run_agent(
                 temperature=0,
             )
         except groq.BadRequestError as e:
-            # The model generated an argument that failed schema validation server-side
-            # (e.g. an unsupported crop). Tell it plainly and let it try again, once.
             err_detail = str(e)
             messages.append(
                 {
@@ -123,7 +122,9 @@ def run_agent(
                     ),
                 }
             )
-            trace.append({"tool": "predict_crop_yield", "args": {}, "result": {"error": err_detail}})
+            trace.append(
+                {"tool": "predict_crop_yield", "args": {}, "result": {"error": err_detail}}
+            )
             continue
         except groq.APIError as e:
             return {
