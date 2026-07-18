@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
 import os
@@ -43,7 +44,6 @@ from terravision.core import (
     ndvi_status,
 )
 
-# Load .env BEFORE anything below reads os.getenv (API key, GEE creds, etc.)
 load_dotenv()
 
 logging.basicConfig(
@@ -57,13 +57,6 @@ log = logging.getLogger("terravision.api")
 
 
 def _normalise_secret(val: object) -> str | None:
-    """
-    Coerce whatever the env / secret store passes in into a plain JSON string.
-
-    os.getenv() → str (fine as-is)
-    Streamlit secrets → AttrDict (must be re-serialised)
-    Returns None when val is falsy.
-    """
     if not val:
         return None
     if isinstance(val, (str, bytes, bytearray)):
@@ -75,16 +68,8 @@ def _normalise_secret(val: object) -> str | None:
 
 
 def _init_ee() -> bool:
-    """
-    Initialise GEE for the API context.
-    Priority:
-      1. GCP_SERVICE_ACCOUNT_JSON env var  (Railway / Docker)
-      2. Application Default Credentials   (local dev)
-    Handles AttrDict from Streamlit secrets transparently.
-    """
     import ee
 
-    # ── 1. Service account env var ────────────────────────────────────────────
     raw_sa = os.getenv("GCP_SERVICE_ACCOUNT_JSON")
     sa = _normalise_secret(raw_sa)
     if sa:
@@ -113,7 +98,6 @@ def _init_ee() -> bool:
                 log.warning("GEE service-account init failed (demo mode): %s", exc)
             return False
 
-    # ── 2. Application Default Credentials (local dev fallback) ───────────────
     try:
         ee.Initialize()
         log.info("GEE initialised via Application Default Credentials.")
@@ -147,6 +131,15 @@ limiter = Limiter(key_func=get_remote_address)
 
 _API_KEY: str = os.getenv("TERRAVISION_API_KEY", "dev-insecure-key")
 _ENV: str = os.getenv("TERRAVISION_ENV", "development")
+
+# SECURITY: fail closed — refuse to start with the known-public default key
+# outside local development.
+if _ENV != "development" and _API_KEY == "dev-insecure-key":
+    raise RuntimeError(
+        "TERRAVISION_API_KEY must be set to a real secret when TERRAVISION_ENV "
+        "is not 'development'. Refusing to start with the public default key."
+    )
+
 _CORS_ORIGINS: list[str] = (
     ["*"]
     if _ENV == "development"
@@ -159,7 +152,9 @@ _hdr = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
 async def require_api_key(k: str | None = Security(_hdr)) -> str:
-    if not k or k != _API_KEY:
+    # SECURITY: constant-time comparison avoids leaking timing information
+    # about how many leading characters of the key match.
+    if not k or not hmac.compare_digest(k, _API_KEY):
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing X-API-Key header.",
@@ -167,21 +162,14 @@ async def require_api_key(k: str | None = Security(_hdr)) -> str:
     return k
 
 
-# ── Noop coroutine ────────────────────────────────────────────────────────────
-
-
 async def _noop_str() -> str | None:
     return None
 
 
 # ── Mock inference fallback ───────────────────────────────────────────────────
-# Used only when no trained checkpoint could be loaded (see load_model() warnings
-# above). Deterministic per (lat, lon, crop) so repeated calls for the same field
-# return consistent mock values instead of random noise on every request.
 
 
 def _mock_infer(lat: float, lon: float, crop: str) -> tuple[float, float]:
-    """Return a deterministic (ndvi, raw_model_output) pair without a real model."""
     seed = int(abs(lat * 10_000 + lon * 10_000)) % (2**31)
     rng = random.Random(seed)
     prior = CROP_PARAMS[crop]["ndvi_prior"]
@@ -191,7 +179,6 @@ def _mock_infer(lat: float, lon: float, crop: str) -> tuple[float, float]:
 
 
 def _mock_confidence(mean_yield: float) -> ConfidenceResult:
-    """Fixed-shape confidence result for mock mode — clearly not MC Dropout."""
     std = abs(mean_yield) * 0.10
     return ConfidenceResult(
         confidence_pct=CONFIDENCE_FLOOR,
@@ -208,8 +195,8 @@ app = FastAPI(
     title="TerraVision AI API",
     description=(
         "Satellite-native crop yield intelligence.\n\n"
-        "**V2 model**: 6-month Sentinel-2 time-series → genuine temporal attention.\n\n"
-        "**Confidence**: live MC Dropout (20 passes) — not hardcoded.\n\n"
+        "**Confidence**: live MC Dropout (20 passes) when a checkpoint is loaded; "
+        "transparent mock fallback otherwise.\n\n"
         "**Auth**: X-API-Key header on /v1/predict and /v1/crops.\n\n"
         "**Rate limit**: 30 req/min per IP."
     ),
@@ -219,10 +206,7 @@ app = FastAPI(
         "email": "ahmedabbas52233@gmail.com",
         "url": "https://github.com/ahmedabbas52233-a11y/TerraVision-AI",
     },
-    license_info={
-        "name": "CC BY 4.0",
-        "url": "https://creativecommons.org/licenses/by/4.0/",
-    },
+    license_info={"name": "CC BY 4.0", "url": "https://creativecommons.org/licenses/by/4.0/"},
     docs_url="/v1/docs",
     redoc_url="/v1/redoc",
     openapi_url="/v1/openapi.json",
@@ -251,15 +235,11 @@ class PredictRequest(BaseModel):
     crop: CropType = Field("Wheat")
     include_ndvi_tile: bool = Field(False)
     include_report: bool = Field(False)
-    mc_passes: int = Field(
-        20, ge=5, le=100, description="MC Dropout passes for confidence (5-100)"
-    )
+    mc_passes: int = Field(20, ge=5, le=100)
 
     model_config = {
         "json_schema_extra": {
-            "examples": [
-                {"lat": 31.5204, "lon": 74.3587, "crop": "Wheat", "mc_passes": 20}
-            ]
+            "examples": [{"lat": 31.5204, "lon": 74.3587, "crop": "Wheat", "mc_passes": 20}]
         }
     }
 
@@ -280,29 +260,23 @@ class PredictResponse(BaseModel):
     lat: float
     lon: float
     crop: str
-    # Satellite
     ndvi: float
     ndvi_status: NdviStatus
     ndvi_tile_url: str | None = None
-    # Climate
     era5: Era5Response
-    # Yield
     yield_base_t_ha: float
     yield_adj_t_ha: float
     yield_delta_t_ha: float
-    # Uncertainty — real MC Dropout, or fixed placeholder in mock mode
     confidence_pct: float
     yield_std_t_ha: float
     ci_95_lower: float
     ci_95_upper: float
-    # Carbon
     carbon_mg_c_ha: float
     carbon_fraction: float
-    # Meta
     model_name: str
     model_version: str
-    model_mode: str  # "trained" | "mock"
-    gee_mode: str  # "live" | "demo"
+    model_mode: str
+    gee_mode: str
     inference_ms: float
     generated_utc: str
     report: str | None = None
@@ -384,21 +358,15 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
     t0 = time.perf_counter()
     log.info(
         "Inference lat=%.4f lon=%.4f crop=%s v2=%s gee=%s model_ready=%s",
-        req.lat,
-        req.lon,
-        req.crop,
-        _IS_V2,
-        _GEE_READY,
-        _MODEL_READY,
+        req.lat, req.lon, req.crop, _IS_V2, _GEE_READY, _MODEL_READY,
     )
 
-    # ── Satellite + climate features (real or demo, depending on GEE) ─────────
     if _MODEL_READY and _IS_V2:
         feat_coro = asyncio.to_thread(get_live_features_v2, req.lat, req.lon, req.crop)
     elif _MODEL_READY:
         feat_coro = asyncio.to_thread(get_live_features, req.lat, req.lon, req.crop)
     else:
-        feat_coro = _noop_str()  # not used in mock mode — placeholder awaitable
+        feat_coro = _noop_str()
 
     era5_coro = asyncio.to_thread(get_era5_features, req.lat, req.lon)
     tile_coro = (
@@ -409,7 +377,6 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
 
     features, era5, ndvi_tile_url = await asyncio.gather(feat_coro, era5_coro, tile_coro)
 
-    # ── Inference — real model, or deterministic mock fallback ────────────────
     def _infer() -> tuple[float, float, float, ConfidenceResult, str]:
         if not _MODEL_READY or _MODEL is None:
             ndvi_val, raw = _mock_infer(req.lat, req.lon, req.crop)
@@ -424,10 +391,11 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
         with torch.no_grad():
             raw = _MODEL(tensor).item()
 
-        if _IS_V2:
-            ndvi_val = float(cast(list[list[float]], features)[0][0])
-        else:
-            ndvi_val = float(cast(list[float], features)[0])
+        ndvi_val = (
+            float(cast(list[list[float]], features)[0][0])
+            if _IS_V2
+            else float(cast(list[float], features)[0])
+        )
 
         ybase = compute_yield(raw, ndvi_val, req.crop)
         yadj = era5_yield_adjustment(
@@ -445,41 +413,23 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
 
     log.info(
         "Done — NDVI=%.4f yield=%.2f conf=%.1f%% model_mode=%s gee_mode=%s in %.0f ms",
-        ndvi,
-        yield_adj,
-        conf["confidence_pct"],
-        model_mode,
-        gee_mode,
-        ms,
+        ndvi, yield_adj, conf["confidence_pct"], model_mode, gee_mode, ms,
     )
 
     report_txt: str | None = None
     if req.include_report:
         report_txt = build_report(
-            req.lat,
-            req.lon,
-            req.crop,
-            ndvi,
-            yield_base,
-            yield_adj,
-            carbon,
-            lbl,
-            act,
-            era5,
-            conf,
+            req.lat, req.lon, req.crop, ndvi, yield_base, yield_adj,
+            carbon, lbl, act, era5, conf,
         )
 
     return PredictResponse(
-        lat=req.lat,
-        lon=req.lon,
-        crop=req.crop,
+        lat=req.lat, lon=req.lon, crop=req.crop,
         ndvi=round(ndvi, 4),
         ndvi_status=NdviStatus(label=lbl, action=act, alert_type=alrt),
         ndvi_tile_url=ndvi_tile_url,
         era5=Era5Response(
-            temp_c=era5["temp_c"],
-            precip_mm_month=era5["precip_mm_month"],
-            source=era5["source"],
+            temp_c=era5["temp_c"], precip_mm_month=era5["precip_mm_month"], source=era5["source"]
         ),
         yield_base_t_ha=round(yield_base, 3),
         yield_adj_t_ha=round(yield_adj, 3),

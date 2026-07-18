@@ -3,10 +3,10 @@
 <div align="center">
 
 ```
-                    ╔══════════════════════════════════════════════════════════════════════════╗
-                    ║           TerraVision AI — Satellite-Native Crop Intelligence            ║
-                    ║       Spatio-Temporal Transformer · Live Sentinel-2 · IPCC Carbon        ║
-                    ╚══════════════════════════════════════════════════════════════════════════╝
+                    ╔══════════════════════════════════════════════════════════════════╗
+                    ║TerraVision AI — Satellite-Native Crop Intelligence               ║
+                    ║Spatio-Temporal Transformer · Live Sentinel-2 · IPCC Carbon       ║
+                    ╚══════════════════════════════════════════════════════════════════╝
 ```
 
 [![Live Demo](https://img.shields.io/badge/🚀_Live_Demo-Streamlit_Cloud-FF4B4B?style=for-the-badge&logo=streamlit)](https://terravision-ai.streamlit.app)
@@ -218,7 +218,7 @@ docker run -p 8000:8000 -e GCP_SERVICE_ACCOUNT_JSON='{"type":"service_account",.
 
 ### Web App
 
-1. Open the [Live Demo](https://terravision-ai-ahjzofhbfw675mapqbbdgg.streamlit.app)
+1. Open the [Live Demo](https://terravision-ai.streamlit.app)
 2. Enter **Latitude & Longitude** (decimal degrees)
 3. Select **Crop Type** — Wheat / Rice / Maize / Soybean
 4. Click **🚀 Run Live Inference**

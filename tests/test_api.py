@@ -390,17 +390,20 @@ class TestPredictSuccess:
 # ─────────────────────────────────────────────────────────────────────────────
 class TestPredictErrors:
 
-    def test_model_not_loaded_returns_503(self, client):
+    def test_model_not_loaded_falls_back_to_mock(self, client):
         with patch("api._MODEL_READY", False):
             r = client.post("/v1/predict", json=VALID_PAYLOAD, headers=HEADERS_OK)
-        assert r.status_code == 503
+        assert r.status_code == 200
+        assert r.json()["model_mode"] == "mock"
 
-    def test_503_body_contains_detail(self, client):
+    def test_mock_response_has_all_required_fields(self, client):
         with patch("api._MODEL_READY", False):
             body = client.post(
                 "/v1/predict", json=VALID_PAYLOAD, headers=HEADERS_OK
             ).json()
-        assert "detail" in body
+        assert "yield_adj_t_ha" in body
+        assert "confidence_pct" in body
+        assert body["model_mode"] == "mock"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
