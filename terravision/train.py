@@ -108,7 +108,7 @@ def generate_v1_dataset(
         ).clip(0.1, None)
 
         raw = np.array(
-            [_raw_target_from_yield(y, n, crop) for y, n in zip(base_yield, ndvi)],
+            [_raw_target_from_yield(y, n, crop) for y, n in zip(base_yield, ndvi, strict=True)],
             dtype=np.float32,
         )
 
@@ -160,7 +160,7 @@ def generate_v2_dataset(
         raw_crop = np.array(
             [
                 _raw_target_from_yield(y, n_val, crop)
-                for y, n_val in zip(base_yield, peak_ndvi)
+                for y, n_val in zip(base_yield, peak_ndvi, strict=True)
             ],
             dtype=np.float32,
         )

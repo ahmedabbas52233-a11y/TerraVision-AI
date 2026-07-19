@@ -23,6 +23,7 @@ from starlette.types import ExceptionHandler
 
 from terravision.core import (
     CARBON_FRACTION,
+    CONFIDENCE_FLOOR,
     CROP_PARAMS,
     MODEL_VERSION,
     ConfidenceResult,
@@ -177,6 +178,36 @@ async def _noop_str() -> str | None:
     return None
 
 
+# ── Mock inference fallback ───────────────────────────────────────────────────
+# Used only when no trained checkpoint could be loaded. Deterministic per
+# (lat, lon, crop) so repeated calls for the same field return consistent
+# mock values rather than random noise on every request.
+
+
+def _mock_infer(lat: float, lon: float, crop: str) -> tuple[float, float]:
+    """Return a deterministic (ndvi, raw_model_output) pair without a real model."""
+    import random
+
+    seed = int(abs(lat * 10_000 + lon * 10_000)) % (2**31)
+    rng = random.Random(seed)
+    prior = CROP_PARAMS[crop]["ndvi_prior"]
+    ndvi_val = float(min(1.0, max(-0.1, prior + rng.uniform(-0.08, 0.08))))
+    raw = rng.uniform(0.30, 0.75)
+    return ndvi_val, raw
+
+
+def _mock_confidence(mean_yield: float) -> ConfidenceResult:
+    """Fixed-shape confidence result for mock mode — clearly not MC Dropout."""
+    std = abs(mean_yield) * 0.10
+    return ConfidenceResult(
+        confidence_pct=CONFIDENCE_FLOOR,
+        std_yield=round(std, 4),
+        ci_95_lower=round(mean_yield - 1.96 * std, 4),
+        ci_95_upper=round(mean_yield + 1.96 * std, 4),
+        n_passes=0,
+    )
+
+
 # ── App ───────────────────────────────────────────────────────────────────────
 
 app = FastAPI(
@@ -276,6 +307,7 @@ class PredictResponse(BaseModel):
     # Meta
     model_name: str
     model_version: str
+    model_mode: str  # "trained" | "mock"
     gee_mode: str  # "live" | "demo"
     inference_ms: float
     generated_utc: str
@@ -355,51 +387,52 @@ async def crops() -> list[CropInfo]:
 )
 @limiter.limit("30/minute")
 async def predict(request: Request, req: PredictRequest) -> PredictResponse:
-    if not _MODEL_READY or _MODEL is None:
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=(
-                "Model not loaded. "
-                "Commit models/terravision_v1.pth and redeploy, "
-                "or run `python train.py` and restart."
-            ),
-        )
-
     t0 = time.perf_counter()
     log.info(
-        "Inference lat=%.4f lon=%.4f crop=%s v2=%s gee=%s",
+        "Inference lat=%.4f lon=%.4f crop=%s v2=%s gee=%s model_ready=%s",
         req.lat,
         req.lon,
         req.crop,
         _IS_V2,
         _GEE_READY,
+        _MODEL_READY,
     )
 
-    # ── Parallel GEE calls ────────────────────────────────────────────────────
-    if _IS_V2:
+    # ── Parallel GEE calls (skipped entirely in mock mode) ────────────────────
+    if _MODEL_READY and _IS_V2:
         feat_coro = asyncio.to_thread(get_live_features_v2, req.lat, req.lon, req.crop)
-    else:
+    elif _MODEL_READY:
         feat_coro = asyncio.to_thread(get_live_features, req.lat, req.lon, req.crop)
+    else:
+        feat_coro = _noop_str()
 
-    features, era5, ndvi_tile_url = await asyncio.gather(
-        feat_coro,
-        asyncio.to_thread(get_era5_features, req.lat, req.lon),
-        (
-            asyncio.to_thread(get_ndvi_tile_url, req.lat, req.lon)
-            if req.include_ndvi_tile
-            else _noop_str()
-        ),
+    era5_coro = asyncio.to_thread(get_era5_features, req.lat, req.lon)
+    tile_coro = (
+        asyncio.to_thread(get_ndvi_tile_url, req.lat, req.lon)
+        if req.include_ndvi_tile
+        else _noop_str()
     )
 
-    # ── Inference + MC Dropout confidence ─────────────────────────────────────
-    def _infer() -> tuple[float, float, float, ConfidenceResult]:
+    features, era5, ndvi_tile_url = await asyncio.gather(feat_coro, era5_coro, tile_coro)
+
+    # ── Inference — real model, or deterministic mock fallback ────────────────
+    def _infer() -> tuple[float, float, float, ConfidenceResult, str]:
+        if not _MODEL_READY or _MODEL is None:
+            ndvi_val, raw = _mock_infer(req.lat, req.lon, req.crop)
+            ybase = compute_yield(raw, ndvi_val, req.crop)
+            yadj = era5_yield_adjustment(
+                ybase, era5["temp_c"], era5["precip_mm_month"], req.crop
+            )
+            conf = _mock_confidence(yadj)
+            return ndvi_val, ybase, yadj, conf, "mock"
+
         if _IS_V2:
             tensor = torch.tensor([features], dtype=torch.float32)
         else:
             tensor = torch.tensor([features], dtype=torch.float32)
 
         with torch.no_grad():
-            raw: float = _MODEL(tensor).item()  # type: ignore[union-attr]
+            raw = _MODEL(tensor).item()  # type: ignore[union-attr]
 
         if _IS_V2:
             ndvi_val = float(cast(list[list[float]], features)[0][0])
@@ -411,9 +444,9 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
             ybase, era5["temp_c"], era5["precip_mm_month"], req.crop
         )
         conf = mc_dropout_confidence(_MODEL, tensor, n_passes=req.mc_passes)  # type: ignore
-        return ndvi_val, ybase, yadj, conf
+        return ndvi_val, ybase, yadj, conf, "trained"
 
-    ndvi, yield_base, yield_adj, conf = await asyncio.to_thread(_infer)
+    ndvi, yield_base, yield_adj, conf, model_mode = await asyncio.to_thread(_infer)
 
     carbon = yield_adj * CARBON_FRACTION
     lbl, act, alrt = ndvi_status(ndvi)
@@ -466,8 +499,9 @@ async def predict(request: Request, req: PredictRequest) -> PredictResponse:
         ci_95_upper=conf["ci_95_upper"],
         carbon_mg_c_ha=round(carbon, 3),
         carbon_fraction=CARBON_FRACTION,
-        model_name=type(_MODEL).__name__,  # type: ignore[union-attr]
+        model_name=type(_MODEL).__name__ if _MODEL else "mock",
         model_version=MODEL_VERSION,
+        model_mode=model_mode,
         gee_mode=gee_mode,
         inference_ms=round(ms, 1),
         generated_utc=datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC"),
