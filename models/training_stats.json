@@ -1,19 +1,29 @@
 {
-  "generated_utc": "2026-06-05T00:00:00",
+  "generated_utc": "2026-07-19T09:44:27.090811+00:00",
   "model_version": "TerraVisionTransformerV2",
-  "test_metrics": {
-    "mse": 1.0483,
-    "rmse": 1.0238,
-    "mae": 0.6506,
-    "r2": 0.799
+  "n_train": 1680,
+  "n_val": 360,
+  "n_test": 360,
+  "best_epoch": 13,
+  "best_val_mse": 0.006301,
+  "test_metrics_raw_output": {
+    "mse": 0.0059,
+    "rmse": 0.0766,
+    "mae": 0.0621,
+    "r2": 0.0273
   },
   "mc_dropout": {
-    "n_passes": 20,
-    "mean_yield": 5.5184,
-    "std_yield": 0.112,
-    "confidence_pct": 91.9,
-    "ci_95_lower": 5.299,
-    "ci_95_upper": 5.738,
-    "ci_95_half_t_ha": 0.2195
-  }
+    "n_passes": 30,
+    "std_yield": 0.0409,
+    "confidence_pct": 86.3,
+    "ci_95_lower": 0.2187,
+    "ci_95_upper": 0.3789
+  },
+  "hyperparameters": {
+    "lr": 0.001,
+    "batch": 128,
+    "patience": 20,
+    "seed": 42
+  },
+  "note": "Trained on synthetic data (see README Known Issues). Metrics are on the model's RAW output, before compute_yield()'s NDVI-based scaling to t/ha \u2014 not a real-world yield accuracy figure."
 }

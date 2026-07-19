@@ -263,15 +263,17 @@ synthetic-data-trained (see Known Issues).
   hand-specified Gaussian formula, not real agricultural ground truth. Any confidence/accuracy
   figures are therefore properties of the synthetic generative process, not validated real-world
   performance. Treat this as a proof-of-architecture, not a benchmarked yield predictor.
-- **`train.py` is currently out of sync with `core.py`.** A prior refactor renamed model layers
-  and removed the `YIELD_MAX` constant / changed the `ConfidenceResult` shape without updating
-  the training script. Committed checkpoints fail to load with shape/key mismatches. The API
-  gracefully falls back to a clearly-labeled deterministic mock inference (`model_mode: "mock"`)
-  rather than serving stale or silently-wrong predictions. **Fixing `train.py` and retraining
-  against the current architecture is the top open task on this project.**
 - **GEE project is not currently registered for Earth Engine access** (free-tier limitation);
   NDVI/satellite data falls back to labeled demo values (`gee_mode: "demo"`).
 - **Agent eval flakiness** — see [LLM Agent Layer](#-llm-agent-layer) above.
+
+**Resolved:** `train.py` was previously out of sync with `core.py` (referenced a removed
+`YIELD_MAX` constant and an outdated model layer/`ConfidenceResult` shape), so committed
+checkpoints failed to load and the API ran on a mock-inference fallback. `train.py` has been
+rewritten to train against `compute_yield()`'s actual NDVI-based scaling, and both V1 and V2
+checkpoints have been retrained and verified to load cleanly (`model_mode: "trained"` in
+API responses). The mock-inference fallback in `api.py` remains in place as a graceful
+degradation path — e.g. if a checkpoint file goes missing — not as the primary code path.
 
 ---
 

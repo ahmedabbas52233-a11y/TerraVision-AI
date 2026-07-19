@@ -2,19 +2,18 @@
 TerraVision AI · terravision/train.py
 Training pipeline for both V1 (seq_len=1) and V2 (6-month time-series) models.
 
+Rewritten to match core.py v3.0.0: the model now predicts a RAW output that
+compute_yield() converts to t/ha via CROP_PARAMS[crop]["ndvi_scale"] plus NDVI-based
+modifiers — there is no fixed YIELD_MAX. Training therefore optimizes the raw output
+against a synthetic target consistent with that scaling, so a trained checkpoint is
+directly usable by api.py's inference path without further conversion.
+
 Usage
 ─────
-  # Train V2 (default — genuine temporal attention)
-  python train.py
-
-  # Train V1 (legacy single-observation model)
-  python train.py --model v1
-
-  # Evaluate existing checkpoint without retraining
-  python train.py --eval-only
-
-  # Custom hyperparameters
-  python train.py --model v2 --epochs 300 --n 8000 --lr 5e-4
+  python -m terravision.train                       # train V2 (default)
+  python -m terravision.train --model v1             # train V1 (legacy)
+  python -m terravision.train --eval-only            # evaluate existing checkpoint
+  python -m terravision.train --model v2 --epochs 300 --n 8000 --lr 5e-4
 
 Author  : Ahmad Abbas Hussain
 Contact : ahmedabbas52233@gmail.com
@@ -35,7 +34,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset, random_split
 
 from terravision.core import (
-    YIELD_MAX,
+    CROP_PARAMS,
     TerraVisionTransformer,
     TerraVisionTransformerV2,
     mc_dropout_confidence,
@@ -52,66 +51,72 @@ ROOT = Path(__file__).parent.parent
 MODEL_DIR = ROOT / "models"
 
 
-CROP_REGISTRY = {
-    "Wheat": {
-        "yield_range": (1.5, 7.0),
-        "temp_K": 291.5,
-        "moisture": 0.025,
-        "ndvi_mean": 0.40,
-        "ndvi_std": 0.15,
-    },
-    "Rice": {
-        "yield_range": (2.0, 8.5),
-        "temp_K": 298.2,
-        "moisture": 0.085,
-        "ndvi_mean": 0.50,
-        "ndvi_std": 0.18,
-    },
-    "Maize": {
-        "yield_range": (2.5, 12.5),
-        "temp_K": 295.0,
-        "moisture": 0.045,
-        "ndvi_mean": 0.55,
-        "ndvi_std": 0.20,
-    },
-    "Soybean": {
-        "yield_range": (1.2, 5.5),
-        "temp_K": 296.5,
-        "moisture": 0.055,
-        "ndvi_mean": 0.45,
-        "ndvi_std": 0.16,
-    },
-}
-
-
 # ─────────────────────────────────────────────────────────────────────────────
 # DATASET GENERATORS
 # ─────────────────────────────────────────────────────────────────────────────
+#
+# Ground truth is synthetic (see README "Known Issues"): NDVI/temperature/moisture
+# are sampled per-crop from CROP_PARAMS priors, and the RAW target the model learns
+# to predict is defined so that compute_yield(raw, ndvi, crop) reproduces a
+# plausible yield curve. This keeps the trained checkpoint consistent with the
+# actual inference path in core.py, unlike the previous version of this file.
+
+
+def _raw_target_from_yield(target_yield: float, ndvi: float, crop: str) -> float:
+    """
+    Invert compute_yield()'s NDVI modifier so we can generate a RAW training
+    target from a desired yield curve. This keeps train.py's target consistent
+    with exactly what compute_yield() will do to the model's raw output at
+    inference time, rather than training against an unrelated scale.
+    """
+    scale = CROP_PARAMS[crop]["ndvi_scale"]
+
+    if ndvi < 0.05:
+        modifier = 0.15
+    elif ndvi < 0.10:
+        modifier = 0.15 + (ndvi - 0.05) / 0.05 * 0.25
+    elif ndvi < 0.20:
+        modifier = 0.40 + (ndvi - 0.10) / 0.10 * 0.35
+    elif ndvi < 0.30:
+        modifier = 0.75 + (ndvi - 0.20) / 0.10 * 0.15
+    elif ndvi < 0.60:
+        modifier = 0.90 + (ndvi - 0.30) / 0.30 * 0.10
+    else:
+        modifier = 1.00 + (ndvi - 0.60) / 0.40 * 0.15
+
+    denom = max(scale * modifier, 1e-6)
+    return target_yield / denom
+
+
 def generate_v1_dataset(
     n_samples: int = 4_000, seed: int = 42
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Single-observation dataset for V1 model: (N, 3) → (N, 1)."""
+    """Single-observation dataset for V1 model: (N, 3) → (N, 1) raw target."""
     rng = np.random.default_rng(seed)
-    n_per = n_samples // len(CROP_REGISTRY)
-    Xs, ys = [], []
-    for cfg in CROP_REGISTRY.values():
-        ndvi = rng.normal(cfg["ndvi_mean"], cfg["ndvi_std"], n_per).clip(-0.1, 1.0)
-        temp_K = rng.normal(cfg["temp_K"], 4.0, n_per).clip(283.0, 308.0)
+    n_per = n_samples // len(CROP_PARAMS)
+    Xs, raws = [], []
+
+    for crop, cfg in CROP_PARAMS.items():
+        ndvi = rng.normal(cfg["ndvi_prior"], 0.15, n_per).clip(-0.1, 1.0)
+        temp_K = rng.normal(cfg["temp_K"], 4.0, n_per).clip(263.0, 318.0)
         moisture = rng.normal(cfg["moisture"], 0.012, n_per).clip(0.01, 0.12)
-        y_min, y_max = cfg["yield_range"]
-        y_range = y_max - y_min
-        y = (
-            y_min
-            + y_range
-            * np.clip(ndvi, 0, 1)
-            * np.exp(-((temp_K - cfg["temp_K"]) ** 2) / (2 * 8.0**2))
-            * np.clip(moisture / cfg["moisture"], 0.6, 1.2)
-            + rng.normal(0, 0.30, n_per)
-        ).clip(0, YIELD_MAX)
+
+        thermal = np.exp(-((temp_K - cfg["temp_K"]) ** 2) / (2 * 8.0**2))
+        base_yield = (
+            cfg["ndvi_scale"] * np.clip(ndvi, 0, 1) * 0.6 * thermal
+            + rng.normal(0, 0.15, n_per)
+        ).clip(0.1, None)
+
+        raw = np.array(
+            [_raw_target_from_yield(y, n, crop) for y, n in zip(base_yield, ndvi)],
+            dtype=np.float32,
+        )
+
         Xs.append(np.column_stack([ndvi, temp_K, moisture]))
-        ys.append(y)
+        raws.append(raw)
+
     X = np.vstack(Xs).astype(np.float32)
-    y = np.concatenate(ys).astype(np.float32)
+    y = np.concatenate(raws).astype(np.float32)
     idx = rng.permutation(len(X))
     return torch.from_numpy(X[idx]), torch.from_numpy(y[idx].reshape(-1, 1))
 
@@ -122,58 +127,49 @@ def generate_v2_dataset(
     seed: int = 42,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """
-    6-month time-series dataset for V2 model: (N, seq_len, 3) → (N, 1).
-
-    Each sample is a synthetic sequence of monthly NDVI observations.
-    The sequence follows a phenological pattern:
-      · Rising phase  (months 1-3): NDVI increases toward seasonal peak
-      · Declining phase (months 4-6): NDVI decreases post-peak
-
-    The yield is correlated with the peak NDVI and sequence shape,
-    giving the V2 transformer meaningful temporal patterns to learn.
+    6-month time-series dataset for V2 model: (N, seq_len, 3) → (N, 1) raw target.
+    Raw target is derived from the sequence's peak NDVI, using the same inversion
+    as the V1 generator so both checkpoints train consistently with core.py.
     """
     rng = np.random.default_rng(seed)
-    n_per = n_samples // len(CROP_REGISTRY)
-    Xs, ys = [], []
+    n_per = n_samples // len(CROP_PARAMS)
+    Xs, raws = [], []
 
-    for cfg in CROP_REGISTRY.items():
-        name, c = cfg
+    for crop, cfg in CROP_PARAMS.items():
         n = n_per
-        peak_ndvi = rng.normal(c["ndvi_mean"], c["ndvi_std"], n).clip(-0.1, 1.0)
+        peak_ndvi = rng.normal(cfg["ndvi_prior"], 0.15, n).clip(-0.1, 1.0)
 
         sequences = []
         for j in range(n):
-            # Phenological envelope: sine curve over seq_len months
             t = np.linspace(0, np.pi, seq_len)
             envelope = np.sin(t) * peak_ndvi[j]
             noise = rng.normal(0, 0.03, seq_len)
             ndvi_seq = np.clip(envelope + noise, -0.1, 1.0)
 
-            temp_K = rng.normal(c["temp_K"], 4.0, seq_len).clip(283, 308)
-            moisture = rng.normal(c["moisture"], 0.012, seq_len).clip(0.01, 0.12)
-            sequences.append(np.stack([ndvi_seq, temp_K, moisture], axis=1))  # (S, 3)
+            temp_K = rng.normal(cfg["temp_K"], 4.0, seq_len).clip(263, 318)
+            moisture = rng.normal(cfg["moisture"], 0.012, seq_len).clip(0.01, 0.12)
+            sequences.append(np.stack([ndvi_seq, temp_K, moisture], axis=1))
 
-        X_crop = np.stack(sequences, axis=0).astype(np.float32)  # (n, S, 3)
+        X_crop = np.stack(sequences, axis=0).astype(np.float32)
 
-        y_min, y_max = c["yield_range"]
-        y_range = y_max - y_min
-        y_crop = (
-            (
-                y_min
-                + y_range
-                * np.clip(peak_ndvi, 0, 1)
-                * np.exp(-((c["temp_K"] - c["temp_K"]) ** 2) / (2 * 8.0**2))
-                + rng.normal(0, 0.30, n)
-            )
-            .clip(0, YIELD_MAX)
-            .astype(np.float32)
+        base_yield = (
+            cfg["ndvi_scale"] * np.clip(peak_ndvi, 0, 1) * 0.6
+            + rng.normal(0, 0.15, n)
+        ).clip(0.1, None)
+
+        raw_crop = np.array(
+            [
+                _raw_target_from_yield(y, n_val, crop)
+                for y, n_val in zip(base_yield, peak_ndvi)
+            ],
+            dtype=np.float32,
         )
 
         Xs.append(X_crop)
-        ys.append(y_crop)
+        raws.append(raw_crop)
 
     X = np.concatenate(Xs, axis=0)
-    y = np.concatenate(ys, axis=0)
+    y = np.concatenate(raws)
     idx = rng.permutation(len(X))
     return torch.from_numpy(X[idx]), torch.from_numpy(y[idx].reshape(-1, 1))
 
@@ -234,11 +230,7 @@ def train_model(
 
     log.info(
         "Training %s for up to %d epochs | train=%d val=%d test=%d",
-        label,
-        epochs,
-        n_train,
-        n_val,
-        n_test,
+        label, epochs, n_train, n_val, n_test,
     )
 
     for ep in range(1, epochs + 1):
@@ -265,10 +257,7 @@ def train_model(
         if ep % 25 == 0 or ep == 1:
             log.info(
                 "  Epoch %3d  train=%.4f  val=%.4f  lr=%.2e",
-                ep,
-                t_mse,
-                v_mse,
-                opt.param_groups[0]["lr"],
+                ep, t_mse, v_mse, opt.param_groups[0]["lr"],
             )
 
         if v_mse < best_val - 1e-5:
@@ -281,21 +270,16 @@ def train_model(
             if pat_cnt >= patience:
                 log.info(
                     "  Early stop at epoch %d (best val=%.4f at ep %d)",
-                    ep,
-                    best_val,
-                    best_ep,
+                    ep, best_val, best_ep,
                 )
                 break
 
     elapsed = time.time() - t0
     log.info(
         "Training done in %.1f s — best val_MSE=%.4f at epoch %d",
-        elapsed,
-        best_val,
-        best_ep,
+        elapsed, best_val, best_ep,
     )
 
-    # Test evaluation
     model.load_state_dict(torch.load(ckpt_path, weights_only=True))
     model.eval()
     preds, trues = [], []
@@ -305,20 +289,17 @@ def train_model(
             trues.append(yb.squeeze(1).numpy())
     metrics = compute_metrics(np.concatenate(trues), np.concatenate(preds))
     log.info(
-        "Test  → MSE=%.4f  RMSE=%.4f t/ha  MAE=%.4f t/ha  R²=%.4f",
-        metrics["mse"],
-        metrics["rmse"],
-        metrics["mae"],
-        metrics["r2"],
+        "Test (raw output) → MSE=%.4f  RMSE=%.4f  MAE=%.4f  R²=%.4f",
+        metrics["mse"], metrics["rmse"], metrics["mae"], metrics["r2"],
     )
 
-    # MC Dropout confidence on test set
     X_test = torch.stack([X[i] for i in test_ds.indices])
-    conf = mc_dropout_confidence(model, X_test[:64], n_passes=30)  # type: ignore[arg-type]
+    conf = mc_dropout_confidence(model, X_test[:1], n_passes=30)
     log.info(
-        "MC Dropout (30 passes) → σ=±%.3f t/ha  95%% CI ±%.3f t/ha",
+        "MC Dropout (30 passes) → std=±%.3f  95%% CI ±%.3f  confidence=%.1f%%",
         conf["std_yield"],
         (conf["ci_95_upper"] - conf["ci_95_lower"]) / 2,
+        conf["confidence_pct"],
     )
 
     stats = {
@@ -329,16 +310,20 @@ def train_model(
         "n_test": n_test,
         "best_epoch": best_ep,
         "best_val_mse": round(best_val, 6),
-        "test_metrics": {k: round(v, 4) for k, v in metrics.items()},
+        "test_metrics_raw_output": {k: round(v, 4) for k, v in metrics.items()},
         "mc_dropout": {
             "n_passes": 30,
-            "mean_yield": conf["mean_yield"],
             "std_yield": conf["std_yield"],
             "confidence_pct": conf["confidence_pct"],
             "ci_95_lower": conf["ci_95_lower"],
             "ci_95_upper": conf["ci_95_upper"],
         },
         "hyperparameters": {"lr": lr, "batch": batch, "patience": patience, "seed": seed},
+        "note": (
+            "Trained on synthetic data (see README Known Issues). Metrics are on the "
+            "model's RAW output, before compute_yield()'s NDVI-based scaling to t/ha — "
+            "not a real-world yield accuracy figure."
+        ),
     }
     stats_path = MODEL_DIR / "training_stats.json"
     stats_path.write_text(json.dumps(stats, indent=2))
@@ -372,11 +357,7 @@ def train(
         ckpt = MODEL_DIR / "terravision_v1.pth"
         label = "TerraVisionTransformer"
 
-    # Normalise input features
-    X_mean, X_std = X.mean(0), X.std(0)
-    X_norm = (X - X_mean) / (X_std + 1e-8)
-
-    return train_model(model, X_norm, y, ckpt, epochs, lr, batch, patience, seed, label)
+    return train_model(model, X, y, ckpt, epochs, lr, batch, patience, seed, label)
 
 
 def eval_only(model_version: str = "v2") -> None:
@@ -392,23 +373,18 @@ def eval_only(model_version: str = "v2") -> None:
         X, y = generate_v2_dataset(n, seed=99)
     else:
         X, y = generate_v1_dataset(n, seed=99)
-    X_norm = (X - X.mean(0)) / (X.std(0) + 1e-8)
     m.eval()
     with torch.no_grad():
-        pred = m(X_norm).squeeze(1).numpy()
+        pred = m(X).squeeze(1).numpy()
     metrics = compute_metrics(y.numpy().ravel(), pred)
     log.info(
-        "Eval → MSE=%.4f RMSE=%.4f MAE=%.4f R²=%.4f",
-        metrics["mse"],
-        metrics["rmse"],
-        metrics["mae"],
-        metrics["r2"],
+        "Eval (raw output) → MSE=%.4f RMSE=%.4f MAE=%.4f R²=%.4f",
+        metrics["mse"], metrics["rmse"], metrics["mae"], metrics["r2"],
     )
-    conf = mc_dropout_confidence(m, X_norm[:64], n_passes=30)
+    conf = mc_dropout_confidence(m, X[:64], n_passes=30)
     log.info(
-        "MC Dropout → σ=±%.3f t/ha  conf=%.1f %%",
-        conf["std_yield"],
-        conf["confidence_pct"],
+        "MC Dropout → std=±%.3f  confidence=%.1f %%",
+        conf["std_yield"], conf["confidence_pct"],
     )
 
 
