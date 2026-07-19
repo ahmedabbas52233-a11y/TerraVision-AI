@@ -1,6 +1,6 @@
 """TerraVision Agent — conversation loop.
 
-Groq (Llama 3.3 70B) + tool-calling over the TerraVision predict_crop_yield tool.
+Groq (Llama 3.3 70B) + tool-calling over geocode_location and predict_crop_yield.
 """
 
 from __future__ import annotations
@@ -26,28 +26,38 @@ using satellite (NDVI) and climate (ERA5) data.
 Rules:
 - For ANY question about crop health, yield, or field conditions at a location, you MUST call
   predict_crop_yield to get real data. Never guess or invent NDVI, yield, or climate numbers.
-- CRITICAL: Never invent latitude/longitude. Only call predict_crop_yield if the user's message
-  contains explicit coordinates, OR a specific named place you can confidently geocode (e.g. a
-  major city). If the message has no location at all (e.g. "my field", "here", "this area"), you
-  MUST ask the user for the location and crop — do NOT guess coordinates.
+- CRITICAL: Never invent latitude/longitude, even for well-known cities. If the user gives
+  explicit coordinates, use them directly. If the user names a place instead (a city, town,
+  village, or region — anywhere in the world), you MUST call geocode_location first to get
+  real coordinates, then call predict_crop_yield with the result. Do NOT answer geocode_location
+  yourself from memory — place names can be ambiguous (multiple cities share names across
+  countries) and only a real lookup resolves this correctly.
+- If geocode_location returns an error (place not found), tell the user plainly and ask them
+  to be more specific (e.g. add a country or region) — do not fall back to a guessed location.
+- If the user's message has NO location at all (e.g. "my field", "here", "this area"), ask for
+  the location and crop instead of guessing anything.
 
   Example — WRONG:
   User: "What's the yield outlook for my field?"
   (calling predict_crop_yield with invented coordinates) ← never do this
 
-  Example — CORRECT:
+  Example — CORRECT (named place):
+  User: "What's the wheat yield near Multan?"
+  (call geocode_location("Multan") → get real lat/lon → call predict_crop_yield with those)
+
+  Example — CORRECT (no location given):
   User: "What's the yield outlook for my field?"
-  Assistant: "I'd need the location (latitude/longitude or a place name) and crop type to check
+  Assistant: "I'd need the location (a place name or coordinates) and crop type to check
   that — could you share those?"
 
 - The ONLY supported crop types are: {", ".join(CROP_TYPES)}. If the user asks about a crop
   NOT in this list (e.g. cotton, sugarcane), tell them plainly that crop isn't supported yet
   and name the crops that are — do NOT call the tool with an unsupported crop value.
-- If the tool result includes a "_note" about demo/mock mode, mention this transparently to the
+- If a tool result includes a "_note" about demo/mock mode, mention this transparently to the
   user — do not present mock numbers as if they were live satellite data.
-- If the tool returns an "error", tell the user plainly what went wrong — do not make up a
+- If a tool returns an "error", tell the user plainly what went wrong — do not make up a
   fallback answer, and do not repeatedly retry the same failing call.
-- Keep answers concise and reference the actual numbers returned by the tool.
+- Keep answers concise and reference the actual numbers returned by the tools.
 """
 
 MODEL_NAME = "llama-3.3-70b-versatile"
@@ -69,8 +79,8 @@ def _looks_like_yield_question(text: str) -> bool:
     return any(kw in lowered for kw in _YIELD_KEYWORDS)
 
 
-def _validate_args(args: dict[str, Any]) -> str | None:
-    """Return an error string if args are invalid, else None."""
+def _validate_predict_args(args: dict[str, Any]) -> str | None:
+    """Return an error string if predict_crop_yield args are invalid, else None."""
     lat, lon, crop = args.get("lat"), args.get("lon"), args.get("crop")
     if lat is None or lon is None or crop is None:
         return "Missing required argument(s): lat, lon, and crop are all required."
@@ -83,14 +93,30 @@ def _validate_args(args: dict[str, Any]) -> str | None:
     return None
 
 
+def _validate_geocode_args(args: dict[str, Any]) -> str | None:
+    place = args.get("place_name")
+    if not place or not str(place).strip():
+        return "Missing required argument: place_name."
+    return None
+
+
+_VALIDATORS = {
+    "predict_crop_yield": _validate_predict_args,
+    "geocode_location": _validate_geocode_args,
+}
+
+
 def run_agent(
     user_message: str,
     history: list[dict[str, Any]] | None = None,
-    max_tool_hops: int = 3,
+    max_tool_hops: int = 4,
 ) -> dict[str, Any]:
     """
     Run one turn of the agent. Returns the final answer plus a trace of tool calls
     (for logging/eval — see agent/eval.py).
+
+    max_tool_hops defaults to 4 (was 3) since a place-name question now legitimately
+    needs two tool calls in sequence: geocode_location, then predict_crop_yield.
     """
     messages: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
     if history:
@@ -123,7 +149,7 @@ def run_agent(
                 }
             )
             trace.append(
-                {"tool": "predict_crop_yield", "args": {}, "result": {"error": err_detail}}
+                {"tool": "unknown", "args": {}, "result": {"error": err_detail}}
             )
             continue
         except groq.APIError as e:
@@ -141,8 +167,9 @@ def run_agent(
                     {
                         "role": "user",
                         "content": (
-                            "Please call the predict_crop_yield tool to answer this — "
-                            "do not answer from general knowledge."
+                            "Please call the appropriate tool(s) to answer this — "
+                            "do not answer from general knowledge, and do not guess "
+                            "coordinates for any named place."
                         ),
                     }
                 )
@@ -174,9 +201,8 @@ def run_agent(
                     )
                 }
             else:
-                validation_error = (
-                    _validate_args(args) if fn_name == "predict_crop_yield" else None
-                )
+                validator = _VALIDATORS.get(fn_name)
+                validation_error = validator(args) if validator else None
                 if validation_error:
                     result = {"error": validation_error}
                 else:
